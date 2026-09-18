@@ -53,12 +53,12 @@ export function AppSidebar() {
     },
     { title: t.nav.clients, href: "/clients", icon: UsersIcon },
     { title: t.nav.reports, href: "/rapports", icon: FileBarChartIcon },
-    ...(session && SETTINGS_ROLES.includes(session.role)
-      ? [{ title: t.nav.settings, href: "/parametres", icon: SettingsIcon }]
-      : []),
     ...(session?.role === "admin"
       ? [{ title: t.nav.users, href: "/utilisateurs", icon: UserCogIcon }]
       : []),
+    ...(session && SETTINGS_ROLES.includes(session.role)
+        ? [{ title: t.nav.settings, href: "/parametres", icon: SettingsIcon }]
+        : []),
   ]
 
   return (

@@ -1,5 +1,6 @@
-const { app, BrowserWindow, ipcMain, shell } = require("electron")
+const { app, BrowserWindow, ipcMain, shell, dialog } = require("electron")
 const path = require("path")
+const fs = require("fs")
 const crypto = require("crypto")
 const { createStaticServer } = require("../scripts/static-server")
 const db = require("./db")
@@ -7,8 +8,16 @@ const { stripeRequest } = require("./stripe-client")
 const stripeSync = require("./stripe-sync")
 const gocardlessSync = require("./gocardless-sync")
 const megaSync = require("./mega-sync")
+const { generateReceiptPdf, renderInvoiceHtml } = require("./invoice-pdf")
+const { setupAutoUpdater } = require("./updater")
 
 const PROTOCOL = "comptakungfu"
+
+// Renommage de l'app ("Electron" -> "Klubo" dans le menu, le Dock, la barre de titre) : le
+// dossier de données utilisateur reste explicitement pointé sur l'ancien nom ("my-project",
+// utilisé avant ce renommage) pour ne pas perdre l'accès à la base SQLite déjà existante.
+app.setName("Klubo")
+app.setPath("userData", path.join(app.getPath("appData"), "my-project"))
 
 let mainWindow = null
 
@@ -18,7 +27,8 @@ function createWindow(port) {
     height: 860,
     minWidth: 960,
     minHeight: 640,
-    title: "Compta Kung-Fu",
+    title: "Klubo",
+    icon: path.join(__dirname, "..", "build", "icon.png"),
     autoHideMenuBar: true,
     webPreferences: {
       contextIsolation: true,
@@ -100,6 +110,88 @@ ipcMain.handle("db:setSetting", (_e, key, value) => db.setSetting(key, value))
 
 ipcMain.handle("vault:read", () => db.getVault() ?? null)
 ipcMain.handle("vault:write", (_e, payload) => db.setVault(payload))
+
+/* ---------- IPC : justificatifs de paiement (PDF) ---------- */
+
+function getClubSettings() {
+  const settings = db.getSettings()
+  return {
+    name: settings.clubName || "Club",
+    address: settings.clubAddress || "",
+    phone: settings.clubPhone || "",
+    rna: settings.clubRna || "",
+    logoUrl: settings.clubLogoUrl || null,
+  }
+}
+
+/** Client à facturer : celui retrouvé automatiquement (Stripe), sauf si le trésorier a lié/saisi autre chose dans l'aperçu. */
+function resolveClient(tx, overrides) {
+  if (!overrides) return db.findClientForTransaction(tx)
+  return {
+    id: overrides.clientId || null,
+    first_name: overrides.firstName || "",
+    last_name: overrides.lastName || "",
+    email: overrides.email || "",
+    address: overrides.address || "",
+  }
+}
+
+ipcMain.handle("receipts:prepare", (_e, transactionId) => {
+  const tx = db.getTransactionById(transactionId)
+  if (!tx) return { ok: false, error: "Transaction introuvable" }
+  const client = db.findClientForTransaction(tx)
+  return {
+    ok: true,
+    tx: { id: tx.id, description: tx.description, amount: tx.amount, date: tx.date, method: tx.method },
+    client: client ?? null,
+  }
+})
+
+ipcMain.handle("receipts:render-preview", (_e, transactionId, overrides) => {
+  try {
+    const tx = db.getTransactionById(transactionId)
+    if (!tx) return { ok: false, error: "Transaction introuvable" }
+    const html = renderInvoiceHtml(tx, getClubSettings(), resolveClient(tx, overrides))
+    return { ok: true, html }
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) }
+  }
+})
+
+ipcMain.handle("receipts:download", async (_e, transactionId, overrides) => {
+  try {
+    const tx = db.getTransactionById(transactionId)
+    if (!tx) return { ok: false, error: "Transaction introuvable" }
+    let client = resolveClient(tx, overrides)
+    if (overrides) {
+      const clientId = overrides.clientId || db.findClientForTransaction(tx)?.id || null
+      if (clientId) {
+        db.updateClient(clientId, {
+          firstName: overrides.firstName,
+          lastName: overrides.lastName,
+          email: overrides.email,
+          address: overrides.address,
+        })
+        client = { ...client, id: clientId }
+      }
+    }
+    const pdfBuffer = await generateReceiptPdf(tx, getClubSettings(), client)
+    const safeName = (`${client?.first_name || ""} ${client?.last_name || ""}`.trim() || tx.member || tx.id).replace(
+      /[^a-zA-Z0-9]+/g,
+      "_",
+    )
+    const { canceled, filePath } = await dialog.showSaveDialog(mainWindow, {
+      title: "Enregistrer le justificatif",
+      defaultPath: `Facture_${safeName}.pdf`,
+      filters: [{ name: "PDF", extensions: ["pdf"] }],
+    })
+    if (canceled || !filePath) return { ok: false, canceled: true }
+    fs.writeFileSync(filePath, pdfBuffer)
+    return { ok: true, path: filePath }
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) }
+  }
+})
 
 /* ---------- IPC : Stripe ---------- */
 ipcMain.handle("stripe:test-connection", async (_event, secretKey) => {
@@ -187,12 +279,18 @@ ipcMain.handle("mega:restore", async (_e, email, password, fileId) => {
 
 /* ---------- Cycle de vie de l'app ---------- */
 app.whenReady().then(() => {
+  if (process.platform === "darwin" && app.dock) {
+    app.dock.setIcon(path.join(__dirname, "..", "build", "icon.png"))
+  }
+
   const outDir = path.join(__dirname, "..", "out")
   const server = createStaticServer(outDir)
 
   server.listen(0, "127.0.0.1", () => {
     const { port } = server.address()
     createWindow(port)
+    // Inutile (et bruyant) en dev, où il n'y a pas de Release GitHub correspondant à la version locale.
+    if (app.isPackaged) setupAutoUpdater(mainWindow)
   })
 
   app.on("activate", () => {

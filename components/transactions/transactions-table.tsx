@@ -13,6 +13,7 @@ import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import {
   InputGroup,
   InputGroupAddon,
@@ -44,8 +45,9 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Empty } from "@/components/ui/empty"
 import { MethodBadge, StatusBadge, Amount } from "@/components/finance-badges"
+import { ReceiptPreviewDialog } from "@/components/transactions/receipt-preview-dialog"
 import { useTranslation } from "@/lib/i18n/context"
-import { ASSIGNABLE_CATEGORIES, formatDate, type Category } from "@/lib/mock-data"
+import { ASSIGNABLE_CATEGORIES, formatDate, formatEuro, type Category } from "@/lib/mock-data"
 import { useTransactionsStore } from "@/lib/transactions-store"
 
 export function TransactionsTable() {
@@ -58,6 +60,7 @@ export function TransactionsTable() {
   const [method, setMethod] = useState("all")
   const [status, setStatus] = useState(searchParams.get("statut") ?? "all")
   const [period, setPeriod] = useState("all")
+  const [previewTxId, setPreviewTxId] = useState<string | null>(null)
 
   const periods = [
     { value: "all", label: t.transactions.periodAll },
@@ -80,6 +83,9 @@ export function TransactionsTable() {
     { value: "valide", label: t.statuses.valide },
     { value: "en_attente", label: t.statuses.en_attente },
     { value: "a_categoriser", label: t.statuses.a_categoriser },
+    { value: "remboursee", label: t.statuses.remboursee },
+    { value: "remboursee_partiellement", label: t.statuses.remboursee_partiellement },
+    { value: "echec", label: t.statuses.echec },
   ]
 
   const filtered = useMemo(() => {
@@ -102,11 +108,31 @@ export function TransactionsTable() {
     })
   }, [rows, query, category, method, status, period])
 
+  const summary = useMemo(() => {
+    let entrees = 0
+    let sorties = 0
+    for (const tx of filtered) {
+      if (tx.status === "echec") continue
+      const value = tx.stripe ? tx.stripe.net : tx.amount
+      if (tx.type === "entree") entrees += value
+      else sorties += value
+    }
+    return { entrees, sorties, net: entrees - sorties }
+  }, [filtered])
+
   function categorize(id: string, targetCategory: Category) {
     categorizeInStore(id, targetCategory)
     toast.success("Transaction catégorisée", {
       description: `Classée dans « ${t.categories[targetCategory]} » et validée.`,
     })
+  }
+
+  function openReceiptPreview(id: string) {
+    if (typeof window === "undefined" || !window.electronAPI) {
+      toast.error(t.settings.electronOnlyFeature)
+      return
+    }
+    setPreviewTxId(id)
   }
 
   const hasFilters =
@@ -207,6 +233,33 @@ export function TransactionsTable() {
         </div>
       </div>
 
+      <div className="grid gap-4 sm:grid-cols-3">
+        <Card>
+          <CardHeader>
+            <CardDescription>{t.transactions.filteredIn}</CardDescription>
+            <CardTitle className="font-mono text-2xl tabular-nums text-success dark:text-[oklch(0.74_0.14_155)]">
+              {formatEuro(summary.entrees)}
+            </CardTitle>
+          </CardHeader>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardDescription>{t.transactions.filteredOut}</CardDescription>
+            <CardTitle className="font-mono text-2xl tabular-nums text-destructive">
+              {formatEuro(summary.sorties)}
+            </CardTitle>
+          </CardHeader>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardDescription>{t.transactions.filteredNet}</CardDescription>
+            <CardTitle className="font-mono text-2xl tabular-nums">
+              {formatEuro(summary.net, { signed: true })}
+            </CardTitle>
+          </CardHeader>
+        </Card>
+      </div>
+
       <div className="overflow-hidden rounded-lg border">
         <Table>
           <TableHeader>
@@ -261,7 +314,14 @@ export function TransactionsTable() {
                   )}
                 </TableCell>
                 <TableCell className="text-right">
-                  <Amount value={tx.type === "entree" ? tx.amount : -tx.amount} />
+                  <div className="flex flex-col items-end gap-0.5">
+                    <Amount value={tx.type === "entree" ? tx.amount : -tx.amount} />
+                    {tx.stripe ? (
+                      <span className="text-[11px] whitespace-nowrap text-muted-foreground">
+                        −{formatEuro(tx.stripe.fee)} {t.transactions.feeShort} · {formatEuro(tx.stripe.net)} {t.transactions.netShort}
+                      </span>
+                    ) : null}
+                  </div>
                 </TableCell>
                 <TableCell>
                   <StatusBadge status={tx.status} />
@@ -313,11 +373,7 @@ export function TransactionsTable() {
                             {t.transactions.viewDetail}
                           </DropdownMenuItem>
                           <DropdownMenuSeparator />
-                          <DropdownMenuItem
-                            onClick={() =>
-                              toast.info("Justificatif téléchargé (démo).")
-                            }
-                          >
+                          <DropdownMenuItem onClick={() => openReceiptPreview(tx.id)}>
                             {t.transactions.downloadReceipt}
                           </DropdownMenuItem>
                         </DropdownMenuGroup>
@@ -345,6 +401,13 @@ export function TransactionsTable() {
       <p className="text-xs text-muted-foreground">
         {filtered.length} {t.transactions.resultsCount} {rows.length}
       </p>
+
+      <ReceiptPreviewDialog
+        transactionId={previewTxId}
+        onOpenChange={(open) => {
+          if (!open) setPreviewTxId(null)
+        }}
+      />
     </div>
   )
 }

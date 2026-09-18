@@ -1,6 +1,12 @@
 export type PaymentMethod = "stripe" | "especes" | "cheque" | "virement"
 export type TransactionType = "entree" | "sortie"
-export type TransactionStatus = "valide" | "en_attente" | "a_categoriser"
+export type TransactionStatus =
+  | "valide"
+  | "en_attente"
+  | "a_categoriser"
+  | "remboursee"
+  | "remboursee_partiellement"
+  | "echec"
 
 export const ALL_PAYMENT_METHODS: PaymentMethod[] = ["especes", "cheque", "virement", "stripe"]
 
@@ -68,6 +74,7 @@ export type CourseType =
   | "Fitness de combat"
   | "Tai-chi"
   | "Self-défense"
+  | "Non catégorisé"
 
 export const ALL_COURSE_TYPES: CourseType[] = [
   "Kung-fu Adulte",
@@ -76,6 +83,7 @@ export const ALL_COURSE_TYPES: CourseType[] = [
   "Fitness de combat",
   "Tai-chi",
   "Self-défense",
+  "Non catégorisé",
 ]
 
 export interface Client {
@@ -83,6 +91,7 @@ export interface Client {
   firstName: string
   lastName: string
   email: string
+  address: string
   status: CourseType
   method: PaymentMethod
   paid: boolean

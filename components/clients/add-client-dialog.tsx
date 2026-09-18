@@ -1,7 +1,7 @@
 "use client"
 
-import { useState } from "react"
-import { PlusIcon } from "lucide-react"
+import { useEffect, useState } from "react"
+import { PencilIcon, PlusIcon } from "lucide-react"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
@@ -28,22 +28,48 @@ import {
 import { Switch } from "@/components/ui/switch"
 import { useClientsStore } from "@/lib/clients-store"
 import { useTranslation } from "@/lib/i18n/context"
-import { ALL_COURSE_TYPES, ALL_PAYMENT_METHODS, type CourseType, type PaymentMethod } from "@/lib/mock-data"
+import {
+  ALL_COURSE_TYPES,
+  ALL_PAYMENT_METHODS,
+  type Client,
+  type CourseType,
+  type PaymentMethod,
+} from "@/lib/mock-data"
 
 const emptyForm = {
   firstName: "",
   lastName: "",
   email: "",
+  address: "",
   status: "Kung-fu Adulte" as CourseType,
   method: "especes" as PaymentMethod,
   paid: true,
 }
 
-export function AddClientDialog() {
+function formFromClient(client: Client) {
+  return {
+    firstName: client.firstName,
+    lastName: client.lastName,
+    email: client.email,
+    address: client.address,
+    status: client.status,
+    method: client.method,
+    paid: client.paid,
+  }
+}
+
+export function AddClientDialog({ client }: { client?: Client } = {}) {
   const { t } = useTranslation()
-  const { addClient, available } = useClientsStore()
+  const { addClient, updateClient, available } = useClientsStore()
   const [open, setOpen] = useState(false)
-  const [form, setForm] = useState(emptyForm)
+  const [form, setForm] = useState(client ? formFromClient(client) : emptyForm)
+  const isEdit = !!client
+
+  useEffect(() => {
+    if (open) {
+      setForm(client ? formFromClient(client) : emptyForm)
+    }
+  }, [open, client])
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -51,8 +77,12 @@ export function AddClientDialog() {
       toast.error(t.settings.electronOnlyFeature)
       return
     }
-    await addClient(form)
-    setForm(emptyForm)
+    if (isEdit) {
+      await updateClient(client.id, form)
+    } else {
+      await addClient(form)
+      setForm(emptyForm)
+    }
     setOpen(false)
     toast.success(t.account.profileSaved)
   }
@@ -61,17 +91,25 @@ export function AddClientDialog() {
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger
         render={
-          <Button>
-            <PlusIcon data-icon="inline-start" />
-            {t.clients.title}
-          </Button>
+          isEdit ? (
+            <Button variant="ghost" size="icon-sm" aria-label={t.common.edit}>
+              <PencilIcon />
+            </Button>
+          ) : (
+            <Button>
+              <PlusIcon data-icon="inline-start" />
+              {t.clients.title}
+            </Button>
+          )
         }
       />
       <DialogContent className="sm:max-w-md">
         <form onSubmit={handleSubmit}>
           <DialogHeader>
-            <DialogTitle>{t.clients.title}</DialogTitle>
-            <DialogDescription>{t.clients.subtitle}</DialogDescription>
+            <DialogTitle>{isEdit ? t.clients.editTitle : t.clients.title}</DialogTitle>
+            <DialogDescription>
+              {isEdit ? t.clients.editSubtitle : t.clients.subtitle}
+            </DialogDescription>
           </DialogHeader>
 
           <FieldGroup className="py-4">
@@ -105,9 +143,18 @@ export function AddClientDialog() {
               <Input
                 id="client-email"
                 type="email"
-                required
                 value={form.email}
                 onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
+              />
+            </Field>
+
+            <Field>
+              <FieldLabel htmlFor="client-address">{t.clients.colAddress}</FieldLabel>
+              <Input
+                id="client-address"
+                value={form.address}
+                onChange={(e) => setForm((f) => ({ ...f, address: e.target.value }))}
+                placeholder="10c Rue de la Barre Andrée, 44470 Thouaré-sur-Loire"
               />
             </Field>
 

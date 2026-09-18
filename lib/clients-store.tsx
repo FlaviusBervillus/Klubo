@@ -15,6 +15,7 @@ function rowToClient(row: DbClient): Client {
     firstName: row.first_name,
     lastName: row.last_name,
     email: row.email,
+    address: row.address,
     status: row.status as CourseType,
     method: row.method as PaymentMethod,
     paid: !!row.paid,
@@ -26,6 +27,7 @@ export interface NewClient {
   firstName: string
   lastName: string
   email: string
+  address: string
   status: CourseType
   method: PaymentMethod
   paid: boolean

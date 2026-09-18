@@ -34,6 +34,11 @@ contextBridge.exposeInMainWorld("electronAPI", {
     read: () => ipcRenderer.invoke("vault:read"),
     write: (payload) => ipcRenderer.invoke("vault:write", payload),
   },
+  prepareReceipt: (transactionId) => ipcRenderer.invoke("receipts:prepare", transactionId),
+  renderReceiptPreview: (transactionId, overrides) =>
+    ipcRenderer.invoke("receipts:render-preview", transactionId, overrides),
+  downloadReceipt: (transactionId, overrides) =>
+    ipcRenderer.invoke("receipts:download", transactionId, overrides),
   testStripeConnection: (secretKey) => ipcRenderer.invoke("stripe:test-connection", secretKey),
   syncStripe: (secretKey) => ipcRenderer.invoke("stripe:sync-all", secretKey),
   gocardless: {

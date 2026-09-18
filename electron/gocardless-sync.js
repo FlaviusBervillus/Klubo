@@ -60,12 +60,29 @@ async function startConsent(secretId, secretKey, institutionId, redirectUri) {
   return { requisitionId: requisition.id, link: requisition.link }
 }
 
-/** À appeler après le retour de consentement : récupère les comptes puis les transactions réelles. */
+/** Récupère le solde réel d'un compte (préfère le solde disponible, sinon le dernier solde comptabilisé). */
+async function fetchBalance(accountId, access) {
+  const data = await request("GET", `/api/v2/accounts/${accountId}/balances/`, access)
+  const balances = data.balances || []
+  const preferred =
+    balances.find((b) => b.balanceType === "interimAvailable") ||
+    balances.find((b) => b.balanceType === "closingBooked") ||
+    balances[0]
+  if (!preferred?.balanceAmount) return null
+  return {
+    amount: Number(preferred.balanceAmount.amount),
+    currency: preferred.balanceAmount.currency,
+  }
+}
+
+/** À appeler après le retour de consentement : récupère les comptes, les transactions et le solde réels. */
 async function completeSync(secretId, secretKey, requisitionId) {
   const access = await getAccessToken(secretId, secretKey)
   const requisition = await request("GET", `/api/v2/requisitions/${requisitionId}/`, access)
 
   let total = 0
+  let balanceTotal = 0
+  let balanceCurrency = null
   for (const accountId of requisition.accounts || []) {
     const tx = await request("GET", `/api/v2/accounts/${accountId}/transactions/`, access)
     const booked = tx.transactions?.booked || []
@@ -79,8 +96,24 @@ async function completeSync(secretId, secretKey, requisitionId) {
     }))
     db.insertBankTransactions(rows)
     total += rows.length
+
+    const balance = await fetchBalance(accountId, access)
+    if (balance) {
+      balanceTotal += balance.amount
+      balanceCurrency = balance.currency
+    }
   }
   db.setSyncState("gocardless", new Date().toISOString())
+  if (balanceCurrency) {
+    db.setSetting(
+      "gocardlessBalance",
+      JSON.stringify({
+        amount: balanceTotal,
+        currency: balanceCurrency,
+        updatedAt: new Date().toISOString(),
+      }),
+    )
+  }
   return total
 }
 

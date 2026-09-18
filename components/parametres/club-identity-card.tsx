@@ -27,12 +27,18 @@ export function ClubIdentityCard() {
   const [stripeAccountName, setStripeAccountName] = useState(
     settings.stripeAccountName,
   )
+  const [address, setAddress] = useState(settings.address)
+  const [phone, setPhone] = useState(settings.phone)
+  const [rna, setRna] = useState(settings.rna)
 
   useEffect(() => {
     setName(settings.name)
     setSeason(settings.season)
     setStripeAccountName(settings.stripeAccountName)
-  }, [settings.name, settings.season, settings.stripeAccountName])
+    setAddress(settings.address)
+    setPhone(settings.phone)
+    setRna(settings.rna)
+  }, [settings.name, settings.season, settings.stripeAccountName, settings.address, settings.phone, settings.rna])
 
   function handleLogoChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
@@ -47,7 +53,7 @@ export function ClubIdentityCard() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    await update({ name, season, stripeAccountName })
+    await update({ name, season, stripeAccountName, address, phone, rna })
     toast.success(t.settings.identitySaved)
   }
 
@@ -137,6 +143,39 @@ export function ClubIdentityCard() {
                 value={stripeAccountName}
                 onChange={(e) => setStripeAccountName(e.target.value)}
                 placeholder="USJA Kung-Fu — Cotisations"
+              />
+            </Field>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field>
+                <FieldLabel htmlFor="club-address">
+                  {t.settings.fieldAddress}
+                </FieldLabel>
+                <Input
+                  id="club-address"
+                  value={address}
+                  onChange={(e) => setAddress(e.target.value)}
+                  placeholder="14 Rue Louis Armand, 44470 Carquefou"
+                />
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="club-phone">
+                  {t.settings.fieldPhone}
+                </FieldLabel>
+                <Input
+                  id="club-phone"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  placeholder="+33 6 79 81 95 05"
+                />
+              </Field>
+            </div>
+            <Field>
+              <FieldLabel htmlFor="club-rna">{t.settings.fieldRna}</FieldLabel>
+              <Input
+                id="club-rna"
+                value={rna}
+                onChange={(e) => setRna(e.target.value)}
+                placeholder="W442029842"
               />
             </Field>
             <Button type="submit" className="w-fit">

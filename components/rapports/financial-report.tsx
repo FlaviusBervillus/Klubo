@@ -1,7 +1,7 @@
 "use client"
 
-import { useMemo, useState } from "react"
-import { DownloadIcon, PrinterIcon, TrendingUpIcon } from "lucide-react"
+import { useEffect, useMemo, useState } from "react"
+import { DownloadIcon, LandmarkIcon, PrinterIcon, TrendingUpIcon } from "lucide-react"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
@@ -41,6 +41,25 @@ export function FinancialReport() {
   const { settings } = useClubSettings()
   const { transactions } = useTransactionsStore()
   const [period, setPeriod] = useState<Period>("annee")
+  const [bankBalance, setBankBalance] = useState<number | null>(null)
+  const [bankAvailable, setBankAvailable] = useState(false)
+
+  useEffect(() => {
+    async function loadBankBalance() {
+      const electronApi = typeof window !== "undefined" ? window.electronAPI : undefined
+      if (!electronApi) return
+      setBankAvailable(true)
+      const settings = await electronApi.db.getSettings()
+      const raw = settings.gocardlessBalance
+      if (!raw) return
+      try {
+        setBankBalance((JSON.parse(raw) as { amount: number }).amount)
+      } catch {
+        // valeur corrompue, on garde le solde bancaire à "non synchronisé"
+      }
+    }
+    loadBankBalance()
+  }, [])
 
   const periodOptions: { value: Period; label: string; count: number }[] = [
     { value: "mois", label: t.reports.periodMonth, count: 1 },
@@ -268,6 +287,27 @@ export function FinancialReport() {
               {positive
                 ? t.reports.netResultPositive
                 : t.reports.netResultNegative}
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardDescription className="flex items-center gap-2">
+              <LandmarkIcon className="size-4" />
+              {t.dashboard.bankBalance}
+            </CardDescription>
+            <CardTitle className="font-mono text-2xl tabular-nums">
+              {bankBalance !== null ? formatEuro(bankBalance) : "—"}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-xs text-muted-foreground">
+              {!bankAvailable
+                ? t.settings.electronOnlyFeature
+                : bankBalance !== null
+                  ? t.dashboard.bankBalanceHint
+                  : t.dashboard.bankBalanceUnsynced}
             </p>
           </CardContent>
         </Card>

@@ -1,11 +1,13 @@
 import type { Category, Transaction, TransactionType } from "@/lib/mock-data"
 
-/** Solde comptable = somme signée de toutes les transactions (entrées − sorties). */
+/** Solde comptable = somme signée de toutes les transactions (entrées − sorties), frais Stripe déduits.
+ * Les tentatives de paiement en échec/annulées (aucun argent réellement encaissé) sont exclues. */
 export function computeAccountBalance(transactions: Transaction[]) {
-  return transactions.reduce(
-    (sum, tx) => sum + (tx.type === "entree" ? tx.amount : -tx.amount),
-    0,
-  )
+  return transactions.reduce((sum, tx) => {
+    if (tx.status === "echec") return sum
+    const value = tx.stripe ? tx.stripe.net : tx.amount
+    return sum + (tx.type === "entree" ? value : -value)
+  }, 0)
 }
 
 const MONTH_FORMATTER = new Intl.DateTimeFormat("fr-FR", { month: "short" })
@@ -26,6 +28,7 @@ export function computeMonthlyFlow(transactions: Transaction[], monthsCount = 6)
   const byKey = new Map(buckets.map((b) => [b.key, b]))
 
   for (const tx of transactions) {
+    if (tx.status === "echec") continue
     const d = new Date(tx.date)
     const key = `${d.getFullYear()}-${d.getMonth()}`
     const bucket = byKey.get(key)
@@ -41,7 +44,7 @@ export function computeMonthlyFlow(transactions: Transaction[], monthsCount = 6)
 export function computeExpenseByCategory(transactions: Transaction[]) {
   const totals = new Map<Category, number>()
   for (const tx of transactions) {
-    if (tx.type !== "sortie") continue
+    if (tx.type !== "sortie" || tx.status === "echec") continue
     if (tx.category === "Non catégorisé") continue
     totals.set(tx.category, (totals.get(tx.category) ?? 0) + tx.amount)
   }
@@ -64,16 +67,37 @@ export function computeCategoryPivot(
   const months = monthDates.map((d) => MONTH_FORMATTER.format(d))
   const monthKeys = monthDates.map((d) => `${d.getFullYear()}-${d.getMonth()}`)
 
+  function monthIndex(date: string) {
+    const d = new Date(date)
+    return monthKeys.indexOf(`${d.getFullYear()}-${d.getMonth()}`)
+  }
+
+  function addTo(rowsByCategory: Map<string, number[]>, category: string, idx: number, amount: number) {
+    if (!rowsByCategory.has(category)) {
+      rowsByCategory.set(category, new Array(monthsCount).fill(0))
+    }
+    rowsByCategory.get(category)![idx] += amount
+  }
+
   const rowsByCategory = new Map<string, number[]>()
   for (const tx of transactions) {
-    if (tx.type !== type || tx.category === "Non catégorisé") continue
-    const d = new Date(tx.date)
-    const idx = monthKeys.indexOf(`${d.getFullYear()}-${d.getMonth()}`)
+    if (tx.type !== type || tx.status === "echec") continue
+    const idx = monthIndex(tx.date)
     if (idx === -1) continue
-    if (!rowsByCategory.has(tx.category)) {
-      rowsByCategory.set(tx.category, new Array(monthsCount).fill(0))
+    // Recettes en montant brut (ce que l'adhérent a payé) : le frais Stripe est
+    // comptabilisé séparément ci-dessous, pour ne pas le soustraire deux fois.
+    addTo(rowsByCategory, tx.category, idx, tx.amount)
+  }
+
+  // Les frais Stripe n'ont pas leur propre transaction ("sortie") : on les rattache
+  // ici à la catégorie "Frais bancaires" pour qu'ils apparaissent comme une charge à part entière.
+  if (type === "sortie") {
+    for (const tx of transactions) {
+      if (tx.type !== "entree" || tx.status === "echec" || !tx.stripe?.fee) continue
+      const idx = monthIndex(tx.date)
+      if (idx === -1) continue
+      addTo(rowsByCategory, "Frais bancaires", idx, tx.stripe.fee)
     }
-    rowsByCategory.get(tx.category)![idx] += tx.amount
   }
 
   const rows = Array.from(rowsByCategory.entries()).map(([category, values]) => ({

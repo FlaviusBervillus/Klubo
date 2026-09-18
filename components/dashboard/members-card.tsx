@@ -20,6 +20,7 @@ const dotColors: Record<CourseType, string> = {
   "Fitness de combat": "bg-warning",
   "Tai-chi": "bg-muted-foreground",
   "Self-défense": "bg-destructive",
+  "Non catégorisé": "bg-border",
 }
 
 export function MembersCard() {

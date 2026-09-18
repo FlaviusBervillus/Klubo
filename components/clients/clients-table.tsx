@@ -45,6 +45,7 @@ const statusStyles: Record<CourseType, string> = {
   "Tai-chi": "border-transparent bg-muted text-muted-foreground",
   "Self-défense":
     "border-transparent bg-destructive/10 text-destructive dark:bg-destructive/20",
+  "Non catégorisé": "border-dashed bg-transparent text-muted-foreground",
 }
 
 export function ClientsTable() {
@@ -156,6 +157,7 @@ export function ClientsTable() {
               <TableHead>{t.clients.colStatus}</TableHead>
               <TableHead>{t.clients.colPayment}</TableHead>
               <TableHead>{t.clients.colPaymentStatus}</TableHead>
+              <TableHead className="w-10" />
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -193,6 +195,9 @@ export function ClientsTable() {
                       {t.clients.unpaid}
                     </Badge>
                   )}
+                </TableCell>
+                <TableCell>
+                  <AddClientDialog client={c} />
                 </TableCell>
               </TableRow>
             ))}

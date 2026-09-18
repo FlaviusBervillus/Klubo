@@ -3,6 +3,7 @@ import { Inter, JetBrains_Mono } from "next/font/google"
 import { ThemeProvider } from "@/components/theme-provider"
 import { AppShell } from "@/components/app-shell"
 import { AuthGate } from "@/components/auth-gate"
+import { VaultUnlockPrompt } from "@/components/vault-unlock-prompt"
 import { Toaster } from "@/components/ui/sonner"
 import { AuthProvider } from "@/lib/auth-context"
 import { ClientsProvider } from "@/lib/clients-store"
@@ -61,6 +62,7 @@ export default function RootLayout({
                     <AuthProvider>
                       <AuthGate>
                         <AppShell>{children}</AppShell>
+                        <VaultUnlockPrompt />
                       </AuthGate>
                       <Toaster position="top-right" />
                     </AuthProvider>

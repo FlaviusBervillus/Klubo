@@ -28,21 +28,30 @@ function api() {
 export function BalanceCards() {
   const { t } = useTranslation()
   const { transactions } = useTransactionsStore()
+  const [available, setAvailable] = useState(false)
   const [bankBalance, setBankBalance] = useState<number | null>(null)
 
   useEffect(() => {
     async function loadBankBalance() {
       const electronApi = api()
       if (!electronApi) return
-      const rows = await electronApi.db.getBankTransactions()
-      if (rows.length === 0) return
-      setBankBalance(rows.reduce((sum, row) => sum + row.amount, 0))
+      setAvailable(true)
+      const settings = await electronApi.db.getSettings()
+      const raw = settings.gocardlessBalance
+      if (raw) {
+        try {
+          const parsed = JSON.parse(raw) as { amount: number }
+          setBankBalance(parsed.amount)
+        } catch {
+          // valeur corrompue, on garde le solde bancaire à 0 (non synchronisé)
+        }
+      }
     }
     loadBankBalance()
   }, [])
 
   const comptable = computeAccountBalance(transactions)
-  const bancaire = bankBalance ?? comptable
+  const bancaire = bankBalance ?? 0
   const ecart = Math.round((bancaire - comptable) * 100) / 100
   const balanced = Math.abs(ecart) < 0.01
 
@@ -77,9 +86,11 @@ export function BalanceCards() {
         </CardHeader>
         <CardContent>
           <p className="text-xs text-muted-foreground">
-            {bankBalance !== null
-              ? t.dashboard.bankBalanceHint
-              : t.settings.electronOnlyFeature}
+            {!available
+              ? t.settings.electronOnlyFeature
+              : bankBalance !== null
+                ? t.dashboard.bankBalanceHint
+                : t.dashboard.bankBalanceUnsynced}
           </p>
         </CardContent>
       </Card>

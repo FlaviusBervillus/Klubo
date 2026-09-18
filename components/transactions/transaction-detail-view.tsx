@@ -1,5 +1,6 @@
 "use client"
 
+import { useState } from "react"
 import Link from "next/link"
 import { useSearchParams } from "next/navigation"
 import {
@@ -14,6 +15,7 @@ import {
   DownloadIcon,
   CreditCardIcon,
 } from "lucide-react"
+import { toast } from "sonner"
 
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -41,6 +43,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import { MethodBadge, StatusBadge, Amount } from "@/components/finance-badges"
+import { ReceiptPreviewDialog } from "@/components/transactions/receipt-preview-dialog"
 import { useClubSettings } from "@/lib/club-settings"
 import { useTranslation } from "@/lib/i18n/context"
 import { formatDate, formatEuro, type Transaction } from "@/lib/mock-data"
@@ -52,6 +55,7 @@ export function TransactionDetailView() {
   const id = searchParams.get("id") ?? ""
   const { getTransaction, loaded } = useTransactionsStore()
   const tx = getTransaction(id)
+  const [previewOpen, setPreviewOpen] = useState(false)
 
   if (!loaded) return null
   if (!tx) {
@@ -63,6 +67,14 @@ export function TransactionDetailView() {
   }
 
   const signed = tx.type === "entree" ? tx.amount : -tx.amount
+
+  function openReceiptPreview() {
+    if (typeof window === "undefined" || !window.electronAPI) {
+      toast.error(t.settings.electronOnlyFeature)
+      return
+    }
+    setPreviewOpen(true)
+  }
 
   return (
     <div className="mx-auto flex w-full max-w-4xl flex-col gap-6">
@@ -170,12 +182,10 @@ export function TransactionDetailView() {
                 </p>
               )}
             </div>
-            {tx.justificatif ? (
-              <Button variant="outline" className="w-full">
-                <DownloadIcon data-icon="inline-start" />
-                {t.transactionDetail.downloadReceipt}
-              </Button>
-            ) : null}
+            <Button variant="outline" className="w-full" onClick={openReceiptPreview}>
+              <DownloadIcon data-icon="inline-start" />
+              {t.transactionDetail.downloadReceipt}
+            </Button>
           </CardContent>
         </Card>
       </div>
@@ -239,6 +249,8 @@ export function TransactionDetailView() {
           </CardContent>
         </Card>
       ) : null}
+
+      <ReceiptPreviewDialog transactionId={previewOpen ? tx.id : null} onOpenChange={setPreviewOpen} />
     </div>
   )
 }

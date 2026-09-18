@@ -1,4 +1,5 @@
 const path = require("path")
+const crypto = require("crypto")
 const { app } = require("electron")
 const { DatabaseSync } = require("node:sqlite")
 
@@ -92,6 +93,16 @@ function migrate(db) {
       last_synced_at TEXT
     );
   `)
+
+  ensureColumn(db, "clients", "address", "address TEXT NOT NULL DEFAULT ''")
+}
+
+/** Ajoute une colonne à une table existante si elle n'y est pas déjà (les CREATE TABLE IF NOT EXISTS ci-dessus ne touchent pas les tables déjà créées lors d'une version antérieure). */
+function ensureColumn(database, table, column, columnDdl) {
+  const columns = database.prepare(`PRAGMA table_info(${table})`).all()
+  if (!columns.some((c) => c.name === column)) {
+    database.exec(`ALTER TABLE ${table} ADD COLUMN ${columnDdl}`)
+  }
 }
 
 /* ---------- Users ---------- */
@@ -164,10 +175,15 @@ function getClients() {
 function createClient(client) {
   getDb()
     .prepare(
-      `INSERT INTO clients (id, stripe_customer_id, first_name, last_name, email, status, method, paid)
-       VALUES (@id, @stripeCustomerId, @firstName, @lastName, @email, @status, @method, @paid)`,
+      `INSERT INTO clients (id, stripe_customer_id, first_name, last_name, email, status, method, paid, address)
+       VALUES (@id, @stripeCustomerId, @firstName, @lastName, @email, @status, @method, @paid, @address)`,
     )
-    .run({ ...client, stripeCustomerId: client.stripeCustomerId ?? null, paid: client.paid ? 1 : 0 })
+    .run({
+      ...client,
+      stripeCustomerId: client.stripeCustomerId ?? null,
+      paid: client.paid ? 1 : 0,
+      address: client.address ?? "",
+    })
 }
 
 function upsertClientByStripeId(client) {
@@ -191,6 +207,90 @@ function upsertClientByStripeId(client) {
   }
 }
 
+/** Retrouve un client "invité" (sans id Stripe) : par email si connu, sinon par nom exact (pas d'email chez les invités). */
+function findGuestClient({ email, firstName, lastName }) {
+  if (email) {
+    return getDb()
+      .prepare("SELECT id, status FROM clients WHERE stripe_customer_id IS NULL AND email = ?")
+      .get(email)
+  }
+  return getDb()
+    .prepare(
+      `SELECT id, status FROM clients
+       WHERE stripe_customer_id IS NULL AND (email IS NULL OR email = '') AND first_name = @firstName AND last_name = @lastName`,
+    )
+    .get({ firstName, lastName })
+}
+
+/** Retrouve le client lié à une transaction Stripe (pour préremplir la facture avec ses infos, notamment une adresse saisie à la main). */
+function findClientForTransaction(tx) {
+  if (tx.method !== "stripe" || !tx.stripe_raw_json) return null
+  let charge = null
+  try {
+    charge = JSON.parse(tx.stripe_raw_json)
+  } catch {
+    return null
+  }
+  if (charge.customer) {
+    return getDb().prepare("SELECT * FROM clients WHERE stripe_customer_id = ?").get(charge.customer) ?? null
+  }
+  const email = charge.billing_details?.email || charge.receipt_email || null
+  if (email) {
+    return (
+      getDb().prepare("SELECT * FROM clients WHERE stripe_customer_id IS NULL AND email = ?").get(email) ?? null
+    )
+  }
+  if (charge.billing_details?.name) {
+    const parts = charge.billing_details.name.trim().split(/\s+/)
+    const firstName = parts[0]
+    const lastName = parts.slice(1).join(" ") || ""
+    return (
+      getDb()
+        .prepare(
+          `SELECT * FROM clients
+           WHERE stripe_customer_id IS NULL AND (email IS NULL OR email = '') AND first_name = ? AND last_name = ?`,
+        )
+        .get(firstName, lastName) ?? null
+    )
+  }
+  return null
+}
+
+/** Pose le cours détecté depuis la description d'une charge, sans jamais écraser un cours déjà choisi (manuellement ou par une charge précédente). */
+function applyDetectedCourseType({ stripeCustomerId, email, firstName, lastName, courseType }) {
+  if (!courseType) return
+  const row = stripeCustomerId
+    ? getDb().prepare("SELECT id, status FROM clients WHERE stripe_customer_id = ?").get(stripeCustomerId)
+    : findGuestClient({ email, firstName, lastName })
+  if (!row || row.status !== "Non catégorisé") return
+  getDb().prepare("UPDATE clients SET status = @status WHERE id = @id").run({ status: courseType, id: row.id })
+}
+
+/** Clients Stripe "invités" (paiement sans compte Stripe) : pas d'id client Stripe, dédupliqués par email, ou par nom si aucun email n'est fourni par Stripe. */
+function upsertGuestClient(client) {
+  const existing = findGuestClient(client)
+  if (existing) {
+    getDb()
+      .prepare(
+        `UPDATE clients SET first_name=@firstName, last_name=@lastName, method=@method WHERE id=@id`,
+      )
+      .run({
+        firstName: client.firstName,
+        lastName: client.lastName,
+        method: client.method,
+        id: existing.id,
+      })
+  } else {
+    createClient({
+      id: `guest_${crypto.randomUUID()}`,
+      status: "Non catégorisé",
+      paid: true,
+      ...client,
+      email: client.email || "",
+    })
+  }
+}
+
 function updateClient(id, patch) {
   const fields = []
   const params = { id }
@@ -201,6 +301,7 @@ function updateClient(id, patch) {
     ["status", "status"],
     ["method", "method"],
     ["paid", "paid"],
+    ["address", "address"],
   ]) {
     if (patch[key] !== undefined) {
       fields.push(`${column} = @${key}`)
@@ -218,6 +319,10 @@ function deleteClient(id) {
 /* ---------- Transactions ---------- */
 function getTransactions() {
   return getDb().prepare("SELECT * FROM transactions ORDER BY date DESC").all()
+}
+
+function getTransactionById(id) {
+  return getDb().prepare("SELECT * FROM transactions WHERE id = ?").get(id)
 }
 
 function createTransaction(tx) {
@@ -246,6 +351,13 @@ function createTransaction(tx) {
     })
 }
 
+/** Insère une transaction par id si elle n'existe pas déjà (jamais de mise à jour, comme upsertTransactionByChargeId). */
+function upsertTransactionById(tx) {
+  const existing = getDb().prepare("SELECT id FROM transactions WHERE id = ?").get(tx.id)
+  if (existing) return
+  createTransaction(tx)
+}
+
 function upsertTransactionByChargeId(tx) {
   const existing = getDb()
     .prepare("SELECT id, category, status FROM transactions WHERE stripe_charge_id = ?")
@@ -267,6 +379,7 @@ function updateTransaction(id, patch) {
     ["amount", "amount"],
     ["method", "method"],
     ["member", "member"],
+    ["stripeNet", "stripe_net"],
   ]) {
     if (patch[key] !== undefined) {
       fields.push(`${column} = @${key}`)
@@ -317,13 +430,13 @@ function getVault() {
   return getDb().prepare("SELECT salt_b64, iv_b64, ciphertext_b64 FROM vault WHERE id = 1").get()
 }
 
-function setVault({ saltB64, ivB64, ciphertextB64 }) {
+function setVault({ salt_b64, iv_b64, ciphertext_b64 }) {
   getDb()
     .prepare(
       `INSERT INTO vault (id, salt_b64, iv_b64, ciphertext_b64) VALUES (1, ?, ?, ?)
        ON CONFLICT(id) DO UPDATE SET salt_b64 = excluded.salt_b64, iv_b64 = excluded.iv_b64, ciphertext_b64 = excluded.ciphertext_b64`,
     )
-    .run(saltB64, ivB64, ciphertextB64)
+    .run(salt_b64, iv_b64, ciphertext_b64)
 }
 
 /* ---------- Sync state ---------- */
@@ -364,11 +477,16 @@ module.exports = {
   getClients,
   createClient,
   upsertClientByStripeId,
+  upsertGuestClient,
+  applyDetectedCourseType,
+  findClientForTransaction,
   updateClient,
   deleteClient,
   getTransactions,
+  getTransactionById,
   createTransaction,
   upsertTransactionByChargeId,
+  upsertTransactionById,
   updateTransaction,
   getBankTransactions,
   insertBankTransactions,

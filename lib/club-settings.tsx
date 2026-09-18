@@ -7,6 +7,9 @@ export interface ClubSettings {
   season: string
   logoUrl: string | null
   stripeAccountName: string
+  address: string
+  phone: string
+  rna: string
 }
 
 const defaultSettings: ClubSettings = {
@@ -14,6 +17,9 @@ const defaultSettings: ClubSettings = {
   season: "",
   logoUrl: null,
   stripeAccountName: "",
+  address: "",
+  phone: "",
+  rna: "",
 }
 
 function api() {
@@ -40,6 +46,9 @@ export function ClubSettingsProvider({ children }: { children: React.ReactNode }
           season: row.clubSeason ?? defaultSettings.season,
           logoUrl: row.clubLogoUrl ?? null,
           stripeAccountName: row.stripeAccountName ?? "",
+          address: row.clubAddress ?? "",
+          phone: row.clubPhone ?? "",
+          rna: row.clubRna ?? "",
         })
       }
       setLoaded(true)
@@ -60,6 +69,9 @@ export function ClubSettingsProvider({ children }: { children: React.ReactNode }
     if (patch.stripeAccountName !== undefined) {
       await electronApi.db.setSetting("stripeAccountName", patch.stripeAccountName)
     }
+    if (patch.address !== undefined) await electronApi.db.setSetting("clubAddress", patch.address)
+    if (patch.phone !== undefined) await electronApi.db.setSetting("clubPhone", patch.phone)
+    if (patch.rna !== undefined) await electronApi.db.setSetting("clubRna", patch.rna)
   }
 
   return (

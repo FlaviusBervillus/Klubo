@@ -12,6 +12,7 @@ export interface Dictionary {
   common: {
     cancel: string
     save: string
+    edit: string
     reset: string
     search: string
     logout: string
@@ -64,6 +65,7 @@ export interface Dictionary {
     accountBalanceHint: string
     bankBalance: string
     bankBalanceHint: string
+    bankBalanceUnsynced: string
     balanceGap: string
     balanceGapOk: string
     balanceGapKo: string
@@ -111,12 +113,25 @@ export interface Dictionary {
     colCategory: string
     colAmount: string
     colStatus: string
+    feeShort: string
+    netShort: string
+    filteredIn: string
+    filteredOut: string
+    filteredNet: string
     viewDetail: string
     downloadReceipt: string
     classify: string
     noResults: string
     resultsCount: string
     addTransaction: string
+  }
+  receiptPreview: {
+    title: string
+    description: string
+    linkClient: string
+    manualOption: string
+    loading: string
+    download: string
   }
   transactionDetail: {
     pageTitle: string
@@ -171,6 +186,9 @@ export interface Dictionary {
     fieldSeason: string
     fieldStripeAccountName: string
     fieldLogo: string
+    fieldAddress: string
+    fieldPhone: string
+    fieldRna: string
     changeLogo: string
     removeLogo: string
     identitySaved: string
@@ -250,11 +268,14 @@ export interface Dictionary {
   clients: {
     title: string
     subtitle: string
+    editTitle: string
+    editSubtitle: string
     searchPlaceholder: string
     allStatuses: string
     colFirstName: string
     colLastName: string
     colEmail: string
+    colAddress: string
     colStatus: string
     colPayment: string
     colPaymentStatus: string

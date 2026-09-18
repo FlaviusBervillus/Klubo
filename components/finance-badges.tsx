@@ -45,6 +45,36 @@ export function StatusBadge({ status }: { status: TransactionStatus }) {
       </Badge>
     )
   }
+  if (status === "remboursee") {
+    return (
+      <Badge
+        variant="outline"
+        className="border-transparent bg-[oklch(0.55_0.13_265)]/12 font-medium text-[oklch(0.5_0.15_265)] dark:text-[oklch(0.75_0.12_265)]"
+      >
+        {t.statuses[status]}
+      </Badge>
+    )
+  }
+  if (status === "remboursee_partiellement") {
+    return (
+      <Badge
+        variant="outline"
+        className="border-transparent bg-warning/15 font-medium text-[oklch(0.5_0.12_60)] dark:text-[oklch(0.8_0.13_65)]"
+      >
+        {t.statuses[status]}
+      </Badge>
+    )
+  }
+  if (status === "echec") {
+    return (
+      <Badge
+        variant="outline"
+        className="border-transparent bg-destructive/10 font-medium text-destructive dark:bg-destructive/20"
+      >
+        {t.statuses[status]}
+      </Badge>
+    )
+  }
   return (
     <Badge
       variant="outline"

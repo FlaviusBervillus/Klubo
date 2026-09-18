@@ -8,12 +8,21 @@ export interface DbUser {
   security_question: string | null
 }
 
+export interface ReceiptOverrides {
+  clientId: string | null
+  firstName: string
+  lastName: string
+  email: string
+  address: string
+}
+
 export interface DbClient {
   id: string
   stripe_customer_id: string | null
   first_name: string
   last_name: string
   email: string
+  address: string
   status: string
   method: string
   paid: number
@@ -86,6 +95,22 @@ declare global {
         read: () => Promise<VaultRow | null>
         write: (payload: VaultRow) => Promise<void>
       }
+      prepareReceipt: (transactionId: string) => Promise<
+        | {
+            ok: true
+            tx: { id: string; description: string; amount: number; date: string; method: string }
+            client: DbClient | null
+          }
+        | { ok: false; error?: string }
+      >
+      renderReceiptPreview: (
+        transactionId: string,
+        overrides?: ReceiptOverrides,
+      ) => Promise<{ ok: true; html: string } | { ok: false; error?: string }>
+      downloadReceipt: (
+        transactionId: string,
+        overrides?: ReceiptOverrides,
+      ) => Promise<{ ok: true; path: string } | { ok: false; error?: string; canceled?: boolean }>
       testStripeConnection: (secretKey: string) => Promise<
         | { ok: true; available: { amount: number; currency: string }[] }
         | { ok: false; error: string }
