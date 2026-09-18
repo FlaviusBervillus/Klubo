@@ -11,7 +11,7 @@ const megaSync = require("./mega-sync")
 const { generateReceiptPdf, renderInvoiceHtml } = require("./invoice-pdf")
 const { setupAutoUpdater } = require("./updater")
 
-const PROTOCOL = "comptakungfu"
+const PROTOCOL = "klubo"
 
 // Renommage de l'app ("Electron" -> "Klubo" dans le menu, le Dock, la barre de titre) : le
 // dossier de données utilisateur reste explicitement pointé sur l'ancien nom ("my-project",

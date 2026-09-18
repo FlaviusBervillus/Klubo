@@ -1,7 +1,7 @@
 const { dialog, shell } = require("electron")
 const { autoUpdater } = require("electron-updater")
 
-const RELEASES_URL = "https://github.com/FlaviusBervillus/kung-fu-accounting-dashboard/releases/latest"
+const RELEASES_URL = "https://github.com/FlaviusBervillus/Klubo/releases/latest"
 
 /**
  * Vérifie les mises à jour via les Releases GitHub. L'app n'étant pas signée par Apple,

@@ -1,5 +1,5 @@
 {
-  "name": "my-project",
+  "name": "Klubo",
   "version": "1.0.0",
   "private": true,
   "main": "electron/main.js",
@@ -43,7 +43,7 @@
     "typescript": "5.7.3"
   },
   "build": {
-    "appId": "fr.club-kungfu-lyon.compta",
+    "appId": "com.klubo.app",
     "productName": "Klubo",
     "files": [
       "electron/**/*",
@@ -55,7 +55,7 @@
     "protocols": [
       {
         "name": "Klubo",
-        "schemes": ["comptakungfu"]
+        "schemes": ["klubo"]
       }
     ],
     "directories": {
@@ -64,7 +64,7 @@
     "publish": {
       "provider": "github",
       "owner": "FlaviusBervillus",
-      "repo": "kung-fu-accounting-dashboard",
+      "repo": "Klubo",
       "releaseType": "release"
     },
     "mac": {
