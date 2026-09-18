@@ -6,6 +6,6 @@ const outDir = path.join(__dirname, "..", "out")
 
 const server = createStaticServer(outDir)
 server.listen(PORT, () => {
-  console.log(`Compta Kung-Fu servi sur http://localhost:${PORT}`)
+  console.log(`Klubo servi sur http://localhost:${PORT}`)
   console.log("(Ctrl+C pour arrêter)")
 })

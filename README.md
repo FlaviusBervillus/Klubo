@@ -1,4 +1,4 @@
-# kung-fu-accounting-dashboard
+# Klubo
 
 This is a [Next.js](https://nextjs.org) project bootstrapped with [v0](https://v0.app).
 
@@ -15,9 +15,19 @@ First, run the development server:
 ```bash
 npm run dev
 # or
+bun run dev
+# or
 yarn dev
 # or
 pnpm dev
+# or
+# pour mettre l'app en version installer
+bun run build && bun run electron
+```
+
+```bash
+# pour l'installer sur MacOs il faut aller dans le terminal et coller 
+xattr -cr /Applications/Klubo.app
 ```
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
