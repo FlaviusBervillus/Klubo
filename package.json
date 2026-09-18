@@ -1,6 +1,6 @@
 {
   "name": "Klubo",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "private": true,
   "main": "electron/main.js",
   "scripts": {
@@ -57,7 +57,9 @@
     "protocols": [
       {
         "name": "Klubo",
-        "schemes": ["klubo"]
+        "schemes": [
+          "klubo"
+        ]
       }
     ],
     "directories": {
@@ -72,7 +74,10 @@
     "mac": {
       "category": "public.app-category.finance",
       "icon": "build/icon.icns",
-      "target": ["dmg", "zip"]
+      "target": [
+        "dmg",
+        "zip"
+      ]
     },
     "win": {
       "target": "nsis",
