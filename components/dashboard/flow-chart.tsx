@@ -17,19 +17,24 @@ import {
   ChartTooltipContent,
   type ChartConfig,
 } from "@/components/ui/chart"
-import { monthlyFlow } from "@/lib/mock-data"
-
-const chartConfig = {
-  entrees: { label: "Entrées", color: "var(--chart-5)" },
-  sorties: { label: "Sorties", color: "var(--chart-1)" },
-} satisfies ChartConfig
+import { computeMonthlyFlow } from "@/lib/dashboard-stats"
+import { useTranslation } from "@/lib/i18n/context"
+import { useTransactionsStore } from "@/lib/transactions-store"
 
 export function FlowChart() {
+  const { t } = useTranslation()
+  const { transactions } = useTransactionsStore()
+  const monthlyFlow = computeMonthlyFlow(transactions)
+  const chartConfig = {
+    entrees: { label: t.dashboard.flowIn, color: "var(--chart-5)" },
+    sorties: { label: t.dashboard.flowOut, color: "var(--chart-1)" },
+  } satisfies ChartConfig
+
   return (
     <Card className="flex flex-col">
       <CardHeader>
-        <CardTitle>Entrées / Sorties</CardTitle>
-        <CardDescription>6 derniers mois · en euros</CardDescription>
+        <CardTitle>{t.dashboard.flowChartTitle}</CardTitle>
+        <CardDescription>{t.dashboard.flowChartSubtitle}</CardDescription>
       </CardHeader>
       <CardContent className="flex-1">
         <ChartContainer config={chartConfig} className="h-[280px] w-full">

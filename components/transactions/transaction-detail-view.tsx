@@ -1,5 +1,7 @@
+"use client"
+
 import Link from "next/link"
-import { notFound } from "next/navigation"
+import { useSearchParams } from "next/navigation"
 import {
   ArrowLeftIcon,
   ArrowDownLeftIcon,
@@ -13,6 +15,7 @@ import {
   CreditCardIcon,
 } from "lucide-react"
 
+import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
@@ -29,17 +32,35 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog"
 import { MethodBadge, StatusBadge, Amount } from "@/components/finance-badges"
-import { getTransaction, formatDate, formatEuro } from "@/lib/mock-data"
+import { useClubSettings } from "@/lib/club-settings"
+import { useTranslation } from "@/lib/i18n/context"
+import { formatDate, formatEuro, type Transaction } from "@/lib/mock-data"
+import { useTransactionsStore } from "@/lib/transactions-store"
 
-export default async function TransactionDetailPage({
-  params,
-}: {
-  params: Promise<{ id: string }>
-}) {
-  const { id } = await params
+export function TransactionDetailView() {
+  const { t } = useTranslation()
+  const searchParams = useSearchParams()
+  const id = searchParams.get("id") ?? ""
+  const { getTransaction, loaded } = useTransactionsStore()
   const tx = getTransaction(id)
-  if (!tx) notFound()
+
+  if (!loaded) return null
+  if (!tx) {
+    return (
+      <p className="text-sm text-muted-foreground">
+        {t.transactions.noResults}
+      </p>
+    )
+  }
 
   const signed = tx.type === "entree" ? tx.amount : -tx.amount
 
@@ -53,7 +74,7 @@ export default async function TransactionDetailPage({
         render={<Link href="/transactions" />}
       >
         <ArrowLeftIcon data-icon="inline-start" />
-        Retour aux transactions
+        {t.transactionDetail.back}
       </Button>
 
       <div className="flex flex-wrap items-start justify-between gap-4">
@@ -74,47 +95,55 @@ export default async function TransactionDetailPage({
       <div className="grid gap-6 md:grid-cols-2">
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Métadonnées</CardTitle>
-            <CardDescription>Informations comptables</CardDescription>
+            <CardTitle className="text-base">
+              {t.transactionDetail.metadata}
+            </CardTitle>
+            <CardDescription>
+              {t.transactionDetail.metadataSubtitle}
+            </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-0">
-            <MetaRow icon={CalendarIcon} label="Date">
+            <MetaRow icon={CalendarIcon} label={t.transactionDetail.date}>
               {formatDate(tx.date, true)}
             </MetaRow>
             <Separator />
             <MetaRow
               icon={tx.type === "entree" ? ArrowDownLeftIcon : ArrowUpRightIcon}
-              label="Sens"
+              label={t.transactionDetail.direction}
             >
-              {tx.type === "entree" ? "Entrée (recette)" : "Sortie (dépense)"}
+              {tx.type === "entree"
+                ? t.transactionDetail.directionIn
+                : t.transactionDetail.directionOut}
             </MetaRow>
             <Separator />
-            <MetaRow icon={CreditCardIcon} label="Montant exact">
+            <MetaRow icon={CreditCardIcon} label={t.transactionDetail.exactAmount}>
               <span className="font-mono tabular-nums">
                 {formatEuro(tx.amount)}
               </span>
             </MetaRow>
             <Separator />
-            <MetaRow icon={TagIcon} label="Catégorie">
+            <MetaRow icon={TagIcon} label={t.transactionDetail.category}>
               {tx.status === "a_categoriser" ? (
                 <Badge
                   variant="outline"
                   className="border-warning/40 bg-warning/15 text-[oklch(0.45_0.12_55)] dark:text-[oklch(0.82_0.14_65)]"
                 >
-                  À catégoriser
+                  {t.statuses.a_categoriser}
                 </Badge>
               ) : (
-                tx.category
+                t.categories[tx.category]
               )}
             </MetaRow>
             <Separator />
-            <MetaRow icon={CreditCardIcon} label="Moyen de paiement">
+            <MetaRow icon={CreditCardIcon} label={t.transactionDetail.method}>
               <MethodBadge method={tx.method} />
             </MetaRow>
             <Separator />
-            <MetaRow icon={UserIcon} label="Adhérent lié">
+            <MetaRow icon={UserIcon} label={t.transactionDetail.linkedMember}>
               {tx.member ?? (
-                <span className="text-muted-foreground">Aucun</span>
+                <span className="text-muted-foreground">
+                  {t.transactionDetail.none}
+                </span>
               )}
             </MetaRow>
           </CardContent>
@@ -122,11 +151,13 @@ export default async function TransactionDetailPage({
 
         <Card className="flex flex-col">
           <CardHeader>
-            <CardTitle className="text-base">Justificatif</CardTitle>
+            <CardTitle className="text-base">
+              {t.transactionDetail.receipt}
+            </CardTitle>
             <CardDescription>
               {tx.justificatif
                 ? tx.justificatif.name
-                : "Aucun justificatif joint"}
+                : t.transactionDetail.noReceipt}
             </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-1 flex-col gap-4">
@@ -135,14 +166,14 @@ export default async function TransactionDetailPage({
                 <ReceiptPreview tx={tx} />
               ) : (
                 <p className="text-sm text-muted-foreground">
-                  Aucun document disponible.
+                  {t.transactionDetail.noReceipt}
                 </p>
               )}
             </div>
             {tx.justificatif ? (
               <Button variant="outline" className="w-full">
                 <DownloadIcon data-icon="inline-start" />
-                Télécharger le justificatif
+                {t.transactionDetail.downloadReceipt}
               </Button>
             ) : null}
           </CardContent>
@@ -159,20 +190,20 @@ export default async function TransactionDetailPage({
                     <span className="flex size-7 items-center justify-center rounded-md bg-[oklch(0.55_0.13_265)]/12 text-[oklch(0.5_0.15_265)] dark:text-[oklch(0.75_0.12_265)]">
                       <CreditCardIcon className="size-4" />
                     </span>
-                    Détails de l&apos;intégration Stripe
+                    {t.transactionDetail.stripeDetails}
                   </span>
                 </AccordionTrigger>
                 <AccordionContent className="flex flex-col gap-4">
                   <div className="grid gap-3 sm:grid-cols-3">
-                    <StripeStat label="Montant brut">
+                    <StripeStat label={t.transactionDetail.grossAmount}>
                       {formatEuro(tx.amount)}
                     </StripeStat>
-                    <StripeStat label="Frais Stripe déduits">
+                    <StripeStat label={t.transactionDetail.stripeFee}>
                       <span className="text-destructive">
                         − {formatEuro(tx.stripe.fee)}
                       </span>
                     </StripeStat>
-                    <StripeStat label="Montant net crédité">
+                    <StripeStat label={t.transactionDetail.netAmount}>
                       <span className="text-success dark:text-[oklch(0.74_0.14_155)]">
                         {formatEuro(tx.stripe.net)}
                       </span>
@@ -196,7 +227,7 @@ export default async function TransactionDetailPage({
 
                   <div className="flex flex-col gap-1.5">
                     <span className="text-xs font-medium text-muted-foreground">
-                      Payload JSON brut
+                      {t.transactionDetail.rawPayload}
                     </span>
                     <pre className="max-h-72 overflow-auto rounded-lg bg-muted p-4 font-mono text-xs leading-relaxed">
                       {JSON.stringify(tx.stripe.raw, null, 2)}
@@ -249,38 +280,93 @@ function StripeStat({
   )
 }
 
-function ReceiptPreview({
-  tx,
-}: {
-  tx: NonNullable<ReturnType<typeof getTransaction>>
-}) {
+function ReceiptPreview({ tx }: { tx: Transaction }) {
   const isImage = tx.justificatif?.type === "image"
   return (
-    <div className="flex w-full max-w-xs flex-col gap-3 rounded-md border bg-card p-4 shadow-sm">
-      <div className="flex items-center justify-between">
-        <span className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-          {isImage ? (
-            <ImageIcon className="size-3.5" />
-          ) : (
-            <FileTextIcon className="size-3.5" />
-          )}
-          {isImage ? "Image" : "PDF"}
+    <Dialog>
+      <DialogTrigger
+        render={
+          <button
+            type="button"
+            className="group/preview flex w-full max-w-xs flex-col gap-3 rounded-md border bg-card p-4 text-left shadow-sm transition-colors hover:border-ring"
+          />
+        }
+      >
+        <div className="flex items-center justify-between">
+          <span className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+            {isImage ? (
+              <ImageIcon className="size-3.5" />
+            ) : (
+              <FileTextIcon className="size-3.5" />
+            )}
+            {isImage ? "Image" : "PDF"}
+          </span>
+          <Badge variant="secondary" className="text-[10px]">
+            Justificatif
+          </Badge>
+        </div>
+        <ReceiptDocument tx={tx} />
+        <span className="text-center text-xs text-muted-foreground opacity-0 transition-opacity group-hover/preview:opacity-100">
+          Cliquer pour agrandir
         </span>
-        <Badge variant="secondary" className="text-[10px]">
-          Justificatif
-        </Badge>
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>{tx.justificatif?.name}</DialogTitle>
+          <DialogDescription>
+            Aperçu généré à partir des données de la transaction {tx.id}.
+          </DialogDescription>
+        </DialogHeader>
+        <ReceiptDocument tx={tx} large />
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function ReceiptDocument({
+  tx,
+  large = false,
+}: {
+  tx: Transaction
+  large?: boolean
+}) {
+  const { settings } = useClubSettings()
+
+  return (
+    <div
+      className={cn(
+        "flex flex-col gap-3 rounded-md border bg-background p-4 font-mono",
+        large ? "text-sm" : "text-[11px]",
+      )}
+    >
+      <div className="flex flex-col items-center gap-0.5 border-b border-dashed pb-3 text-center">
+        <span className="font-semibold">{settings.name}</span>
+        <span className="text-muted-foreground">Reçu de paiement</span>
       </div>
-      <div className="flex flex-col gap-1.5">
-        <div className="h-2 w-2/3 rounded-full bg-muted" />
-        <div className="h-2 w-full rounded-full bg-muted" />
-        <div className="h-2 w-5/6 rounded-full bg-muted" />
-      </div>
+      <dl className="flex flex-col gap-1.5">
+        <div className="flex items-center justify-between gap-4">
+          <dt className="text-muted-foreground">Date</dt>
+          <dd>{formatDate(tx.date, true)}</dd>
+        </div>
+        <div className="flex items-center justify-between gap-4">
+          <dt className="text-muted-foreground">Référence</dt>
+          <dd>{tx.id}</dd>
+        </div>
+        <div className="flex items-center justify-between gap-4">
+          <dt className="text-muted-foreground">Motif</dt>
+          <dd className="max-w-40 truncate text-right">{tx.description}</dd>
+        </div>
+        {tx.member ? (
+          <div className="flex items-center justify-between gap-4">
+            <dt className="text-muted-foreground">Adhérent</dt>
+            <dd>{tx.member}</dd>
+          </div>
+        ) : null}
+      </dl>
       <Separator />
-      <div className="flex items-center justify-between text-sm">
-        <span className="text-muted-foreground">Total</span>
-        <span className="font-mono font-semibold tabular-nums">
-          {formatEuro(tx.amount)}
-        </span>
+      <div className="flex items-center justify-between font-semibold">
+        <span>Total</span>
+        <span className="tabular-nums">{formatEuro(tx.amount)}</span>
       </div>
     </div>
   )

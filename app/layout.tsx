@@ -1,9 +1,15 @@
-import { Analytics } from "@vercel/analytics/next"
 import type { Metadata, Viewport } from "next"
 import { Inter, JetBrains_Mono } from "next/font/google"
 import { ThemeProvider } from "@/components/theme-provider"
 import { AppShell } from "@/components/app-shell"
+import { AuthGate } from "@/components/auth-gate"
 import { Toaster } from "@/components/ui/sonner"
+import { AuthProvider } from "@/lib/auth-context"
+import { ClientsProvider } from "@/lib/clients-store"
+import { ClubSettingsProvider } from "@/lib/club-settings"
+import { LocaleProvider } from "@/lib/i18n/context"
+import { SecureVaultProvider } from "@/lib/secure-vault"
+import { TransactionsProvider } from "@/lib/transactions-store"
 import "./globals.css"
 
 const inter = Inter({
@@ -47,10 +53,23 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
-          <AppShell>{children}</AppShell>
-          <Toaster position="top-right" />
+          <LocaleProvider>
+            <ClubSettingsProvider>
+              <SecureVaultProvider>
+                <TransactionsProvider>
+                  <ClientsProvider>
+                    <AuthProvider>
+                      <AuthGate>
+                        <AppShell>{children}</AppShell>
+                      </AuthGate>
+                      <Toaster position="top-right" />
+                    </AuthProvider>
+                  </ClientsProvider>
+                </TransactionsProvider>
+              </SecureVaultProvider>
+            </ClubSettingsProvider>
+          </LocaleProvider>
         </ThemeProvider>
-        {process.env.NODE_ENV === "production" && <Analytics />}
       </body>
     </html>
   )

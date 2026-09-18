@@ -5,6 +5,7 @@ import { MoonIcon, SunIcon } from "lucide-react"
 import { useTheme } from "next-themes"
 
 import { AppSidebar } from "@/components/app-sidebar"
+import { LanguageToggle } from "@/components/language-toggle"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import {
@@ -12,21 +13,17 @@ import {
   SidebarProvider,
   SidebarTrigger,
 } from "@/components/ui/sidebar"
-
-const titles: Record<string, string> = {
-  "/": "Tableau de bord",
-  "/transactions": "Transactions",
-  "/rapports": "Rapports & exports",
-  "/parametres": "Paramètres",
-}
+import { useTranslation } from "@/lib/i18n/context"
+import { normalizePathname } from "@/lib/utils"
 
 function ThemeToggle() {
   const { setTheme, resolvedTheme } = useTheme()
+  const { t } = useTranslation()
   return (
     <Button
       variant="ghost"
       size="icon"
-      aria-label="Changer de thème"
+      aria-label={t.header.toggleTheme}
       onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}
     >
       <SunIcon className="dark:hidden" />
@@ -36,10 +33,24 @@ function ThemeToggle() {
 }
 
 export function AppShell({ children }: { children: React.ReactNode }) {
-  const pathname = usePathname()
+  const pathname = normalizePathname(usePathname())
+  const { t } = useTranslation()
+
+  if (pathname === "/login") {
+    return <>{children}</>
+  }
+
+  const titles: Record<string, string> = {
+    "/": t.dashboard.title,
+    "/transactions": t.nav.transactions,
+    "/clients": t.nav.clients,
+    "/rapports": t.nav.reports,
+    "/parametres": t.nav.settings,
+    "/utilisateurs": t.nav.users,
+  }
   const title =
     titles[pathname] ??
-    (pathname.startsWith("/transactions") ? "Détail transaction" : "")
+    (pathname.startsWith("/transactions") ? t.transactionDetail.pageTitle : "")
 
   return (
     <SidebarProvider>
@@ -49,7 +60,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <SidebarTrigger className="-ml-1" />
           <Separator orientation="vertical" className="mr-2 !h-5" />
           <h1 className="text-base font-semibold">{title}</h1>
-          <div className="ml-auto">
+          <div className="ml-auto flex items-center gap-1">
+            <LanguageToggle />
             <ThemeToggle />
           </div>
         </header>

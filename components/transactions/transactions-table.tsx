@@ -11,7 +11,6 @@ import {
 } from "lucide-react"
 import { toast } from "sonner"
 
-import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import {
@@ -45,57 +44,43 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Empty } from "@/components/ui/empty"
 import { MethodBadge, StatusBadge, Amount } from "@/components/finance-badges"
-import {
-  transactions as seed,
-  formatDate,
-  methodLabels,
-  type Transaction,
-} from "@/lib/mock-data"
-
-const categories = [
-  "Cotisations",
-  "Licences",
-  "Équipements",
-  "Location salle",
-  "Compétitions",
-  "Subventions",
-  "Assurance",
-  "Stages & événements",
-  "Frais bancaires",
-]
-
-const periods = [
-  { value: "all", label: "Toute la saison" },
-  { value: "30", label: "30 derniers jours" },
-  { value: "90", label: "90 derniers jours" },
-]
-
-const categoryItems = [
-  { value: "all", label: "Toutes catégories" },
-  ...categories.map((c) => ({ value: c, label: c })),
-]
-
-const methodItems = [
-  { value: "all", label: "Tous paiements" },
-  ...Object.entries(methodLabels).map(([value, label]) => ({ value, label })),
-]
-
-const statusItems = [
-  { value: "all", label: "Tous statuts" },
-  { value: "valide", label: "Validé" },
-  { value: "en_attente", label: "En attente" },
-  { value: "a_categoriser", label: "À catégoriser" },
-]
+import { useTranslation } from "@/lib/i18n/context"
+import { ASSIGNABLE_CATEGORIES, formatDate, type Category } from "@/lib/mock-data"
+import { useTransactionsStore } from "@/lib/transactions-store"
 
 export function TransactionsTable() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const [rows, setRows] = useState<Transaction[]>(seed)
+  const { t } = useTranslation()
+  const { transactions: rows, categorize: categorizeInStore } = useTransactionsStore()
   const [query, setQuery] = useState("")
   const [category, setCategory] = useState("all")
   const [method, setMethod] = useState("all")
   const [status, setStatus] = useState(searchParams.get("statut") ?? "all")
   const [period, setPeriod] = useState("all")
+
+  const periods = [
+    { value: "all", label: t.transactions.periodAll },
+    { value: "30", label: t.transactions.period30 },
+    { value: "90", label: t.transactions.period90 },
+  ]
+
+  const categoryItems = [
+    { value: "all", label: t.transactions.allCategories },
+    ...ASSIGNABLE_CATEGORIES.map((c) => ({ value: c, label: t.categories[c] })),
+  ]
+
+  const methodItems = [
+    { value: "all", label: t.transactions.allMethods },
+    ...Object.entries(t.methods).map(([value, label]) => ({ value, label })),
+  ]
+
+  const statusItems = [
+    { value: "all", label: t.transactions.allStatuses },
+    { value: "valide", label: t.statuses.valide },
+    { value: "en_attente", label: t.statuses.en_attente },
+    { value: "a_categoriser", label: t.statuses.a_categoriser },
+  ]
 
   const filtered = useMemo(() => {
     const now = Date.now()
@@ -117,16 +102,10 @@ export function TransactionsTable() {
     })
   }, [rows, query, category, method, status, period])
 
-  function categorize(id: string) {
-    setRows((prev) =>
-      prev.map((t) =>
-        t.id === id
-          ? { ...t, status: "valide", category: "Cotisations" }
-          : t,
-      ),
-    )
+  function categorize(id: string, targetCategory: Category) {
+    categorizeInStore(id, targetCategory)
     toast.success("Transaction catégorisée", {
-      description: "Classée dans « Cotisations » et validée.",
+      description: `Classée dans « ${t.categories[targetCategory]} » et validée.`,
     })
   }
 
@@ -153,7 +132,7 @@ export function TransactionsTable() {
             <SearchIcon />
           </InputGroupAddon>
           <InputGroupInput
-            placeholder="Rechercher (adhérent, description…)"
+            placeholder={t.transactions.searchPlaceholder}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />
@@ -222,7 +201,7 @@ export function TransactionsTable() {
 
           {hasFilters ? (
             <Button variant="ghost" size="sm" onClick={reset}>
-              Réinitialiser
+              {t.common.reset}
             </Button>
           ) : null}
         </div>
@@ -232,69 +211,83 @@ export function TransactionsTable() {
         <Table>
           <TableHeader>
             <TableRow className="bg-muted/50">
-              <TableHead>Date</TableHead>
-              <TableHead>Description / Adhérent</TableHead>
-              <TableHead>Paiement</TableHead>
-              <TableHead>Catégorie</TableHead>
-              <TableHead className="text-right">Montant</TableHead>
-              <TableHead>Statut</TableHead>
+              <TableHead>{t.transactions.colDate}</TableHead>
+              <TableHead>{t.transactions.colDescription}</TableHead>
+              <TableHead>{t.transactions.colMethod}</TableHead>
+              <TableHead>{t.transactions.colCategory}</TableHead>
+              <TableHead className="text-right">
+                {t.transactions.colAmount}
+              </TableHead>
+              <TableHead>{t.transactions.colStatus}</TableHead>
               <TableHead className="w-10" />
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filtered.map((t) => (
+            {filtered.map((tx) => (
               <TableRow
-                key={t.id}
+                key={tx.id}
                 className="cursor-pointer"
-                onClick={() => router.push(`/transactions/${t.id}`)}
+                onClick={() => router.push(`/transactions/detail?id=${tx.id}`)}
               >
                 <TableCell className="whitespace-nowrap text-muted-foreground">
-                  {formatDate(t.date)}
+                  {formatDate(tx.date)}
                 </TableCell>
                 <TableCell>
                   <div className="flex flex-col">
-                    <span className="font-medium">{t.description}</span>
-                    {t.member ? (
+                    <span className="font-medium">{tx.description}</span>
+                    {tx.member ? (
                       <span className="text-xs text-muted-foreground">
-                        {t.member}
+                        {tx.member}
                       </span>
                     ) : null}
                   </div>
                 </TableCell>
                 <TableCell>
-                  <MethodBadge method={t.method} />
+                  <MethodBadge method={tx.method} />
                 </TableCell>
                 <TableCell>
-                  {t.status === "a_categoriser" ? (
+                  {tx.status === "a_categoriser" ? (
                     <Badge
                       variant="outline"
                       className="gap-1 border-warning/40 bg-warning/15 text-[oklch(0.45_0.12_55)] dark:text-[oklch(0.82_0.14_65)]"
                     >
                       <SparklesIcon className="size-3" />
-                      À catégoriser
+                      {t.statuses.a_categoriser}
                     </Badge>
                   ) : (
                     <span className="text-sm text-muted-foreground">
-                      {t.category}
+                      {t.categories[tx.category]}
                     </span>
                   )}
                 </TableCell>
                 <TableCell className="text-right">
-                  <Amount value={t.type === "entree" ? t.amount : -t.amount} />
+                  <Amount value={tx.type === "entree" ? tx.amount : -tx.amount} />
                 </TableCell>
                 <TableCell>
-                  <StatusBadge status={t.status} />
+                  <StatusBadge status={tx.status} />
                 </TableCell>
                 <TableCell onClick={(e) => e.stopPropagation()}>
-                  {t.status === "a_categoriser" ? (
-                    <Button
-                      size="sm"
-                      className="h-8 gap-1"
-                      onClick={() => categorize(t.id)}
-                    >
-                      <ZapIcon data-icon="inline-start" />
-                      Classer
-                    </Button>
+                  {tx.status === "a_categoriser" ? (
+                    <DropdownMenu>
+                      <DropdownMenuTrigger
+                        render={<Button size="sm" className="h-8 gap-1" />}
+                      >
+                        <ZapIcon data-icon="inline-start" />
+                        {t.transactions.classify}
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuGroup>
+                          {ASSIGNABLE_CATEGORIES.map((c) => (
+                            <DropdownMenuItem
+                              key={c}
+                              onClick={() => categorize(tx.id, c)}
+                            >
+                              {t.categories[c]}
+                            </DropdownMenuItem>
+                          ))}
+                        </DropdownMenuGroup>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   ) : (
                     <DropdownMenu>
                       <DropdownMenuTrigger
@@ -313,11 +306,11 @@ export function TransactionsTable() {
                         <DropdownMenuGroup>
                           <DropdownMenuItem
                             onClick={() =>
-                              router.push(`/transactions/${t.id}`)
+                              router.push(`/transactions/detail?id=${tx.id}`)
                             }
                           >
                             <EyeIcon />
-                            Voir le détail
+                            {t.transactions.viewDetail}
                           </DropdownMenuItem>
                           <DropdownMenuSeparator />
                           <DropdownMenuItem
@@ -325,7 +318,7 @@ export function TransactionsTable() {
                               toast.info("Justificatif téléchargé (démo).")
                             }
                           >
-                            Télécharger le justificatif
+                            {t.transactions.downloadReceipt}
                           </DropdownMenuItem>
                         </DropdownMenuGroup>
                       </DropdownMenuContent>
@@ -340,18 +333,17 @@ export function TransactionsTable() {
         {filtered.length === 0 ? (
           <Empty className="border-0">
             <p className="text-sm text-muted-foreground">
-              Aucune transaction ne correspond à ces filtres.
+              {t.transactions.noResults}
             </p>
             <Button variant="outline" size="sm" onClick={reset} className="mt-3">
-              Réinitialiser les filtres
+              {t.common.reset}
             </Button>
           </Empty>
         ) : null}
       </div>
 
       <p className="text-xs text-muted-foreground">
-        {filtered.length} transaction{filtered.length > 1 ? "s" : ""} affichée
-        {filtered.length > 1 ? "s" : ""} sur {rows.length}
+        {filtered.length} {t.transactions.resultsCount} {rows.length}
       </p>
     </div>
   )

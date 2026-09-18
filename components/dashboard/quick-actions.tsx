@@ -2,7 +2,6 @@
 
 import { useRouter } from "next/navigation"
 import { PlusIcon, RefreshCwIcon, CloudUploadIcon } from "lucide-react"
-import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -13,30 +12,24 @@ import {
   CardTitle,
 } from "@/components/ui/card"
 import { AddTransactionDialog } from "@/components/add-transaction-dialog"
+import { useTranslation } from "@/lib/i18n/context"
 
 export function QuickActions() {
   const router = useRouter()
-
-  function handleBackup() {
-    toast.promise(new Promise((res) => setTimeout(res, 1800)), {
-      loading: "Sauvegarde en cours et envoi vers Mega…",
-      success: "Sauvegarde terminée et synchronisée sur Mega.",
-      error: "Échec de la sauvegarde.",
-    })
-  }
+  const { t } = useTranslation()
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Actions rapides</CardTitle>
-        <CardDescription>Les opérations courantes du trésorier</CardDescription>
+        <CardTitle>{t.dashboard.quickActionsTitle}</CardTitle>
+        <CardDescription>{t.dashboard.quickActionsSubtitle}</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
         <AddTransactionDialog
           trigger={
             <Button variant="outline" className="w-full justify-start">
               <PlusIcon data-icon="inline-start" />
-              Ajouter une transaction manuelle
+              {t.dashboard.addManualTransaction}
             </Button>
           }
         />
@@ -46,15 +39,15 @@ export function QuickActions() {
           onClick={() => router.push("/transactions?statut=a_categoriser")}
         >
           <RefreshCwIcon data-icon="inline-start" />
-          Rapprochement bancaire
+          {t.dashboard.bankReconciliation}
         </Button>
         <Button
           variant="outline"
           className="w-full justify-start"
-          onClick={handleBackup}
+          onClick={() => router.push("/parametres")}
         >
           <CloudUploadIcon data-icon="inline-start" />
-          Lancer une sauvegarde
+          {t.dashboard.launchBackup}
         </Button>
       </CardContent>
     </Card>

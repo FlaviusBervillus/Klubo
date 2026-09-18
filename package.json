@@ -2,18 +2,24 @@
   "name": "my-project",
   "version": "0.1.0",
   "private": true,
+  "main": "electron/main.js",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start"
+    "serve": "node scripts/serve.js",
+    "start": "node scripts/serve.js",
+    "lint": "next lint",
+    "electron": "electron .",
+    "electron:build": "next build && electron-builder"
   },
   "dependencies": {
     "@base-ui/react": "^1.5.0",
-    "@vercel/analytics": "1.6.1",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cn": "^0.2.6",
+    "hash-wasm": "^4.12.0",
     "lucide-react": "^1.16.0",
+    "megajs": "^1.3.10",
     "next": "16.3.3",
     "next-themes": "^0.4.6",
     "react": "^19",
@@ -29,8 +35,38 @@
     "@types/node": "^24",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "electron": "^44.4.2",
+    "electron-builder": "^25.1.8",
     "postcss": "^8.5",
     "tailwindcss": "^4.3.3",
     "typescript": "5.7.3"
+  },
+  "build": {
+    "appId": "fr.club-kungfu-lyon.compta",
+    "productName": "Compta Kung-Fu",
+    "files": [
+      "electron/**/*",
+      "scripts/**/*",
+      "out/**/*",
+      "package.json"
+    ],
+    "protocols": [
+      {
+        "name": "Compta Kung-Fu",
+        "schemes": ["comptakungfu"]
+      }
+    ],
+    "directories": {
+      "output": "dist-electron"
+    },
+    "mac": {
+      "category": "public.app-category.finance"
+    },
+    "win": {
+      "target": "nsis"
+    },
+    "linux": {
+      "target": "AppImage"
+    }
   }
 }

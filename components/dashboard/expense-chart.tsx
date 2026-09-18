@@ -15,7 +15,10 @@ import {
   ChartTooltipContent,
   type ChartConfig,
 } from "@/components/ui/chart"
-import { expenseByCategory, formatEuro } from "@/lib/mock-data"
+import { computeExpenseByCategory } from "@/lib/dashboard-stats"
+import { useTranslation } from "@/lib/i18n/context"
+import { formatEuro } from "@/lib/mock-data"
+import { useTransactionsStore } from "@/lib/transactions-store"
 
 const palette = [
   "var(--chart-1)",
@@ -26,24 +29,30 @@ const palette = [
   "var(--muted-foreground)",
 ]
 
-const chartConfig = expenseByCategory.reduce((acc, item, i) => {
-  acc[item.key] = { label: item.category, color: palette[i % palette.length] }
-  return acc
-}, {} as ChartConfig)
-
-const data = expenseByCategory.map((item, i) => ({
-  ...item,
-  fill: palette[i % palette.length],
-}))
-
 export function ExpenseChart() {
+  const { t } = useTranslation()
+  const { transactions } = useTransactionsStore()
+  const expenseByCategory = computeExpenseByCategory(transactions)
   const total = expenseByCategory.reduce((s, e) => s + e.amount, 0)
+
+  const chartConfig = expenseByCategory.reduce((acc, item, i) => {
+    acc[item.key] = {
+      label: t.categories[item.category],
+      color: palette[i % palette.length],
+    }
+    return acc
+  }, {} as ChartConfig)
+
+  const data = expenseByCategory.map((item, i) => ({
+    ...item,
+    fill: palette[i % palette.length],
+  }))
 
   return (
     <Card className="flex flex-col">
       <CardHeader>
-        <CardTitle>Répartition des dépenses</CardTitle>
-        <CardDescription>Par catégorie · saison en cours</CardDescription>
+        <CardTitle>{t.dashboard.expenseChartTitle}</CardTitle>
+        <CardDescription>{t.dashboard.expenseChartSubtitle}</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-1 flex-col gap-4 md:flex-row md:items-center">
         <ChartContainer
@@ -101,7 +110,7 @@ export function ExpenseChart() {
                           y={(viewBox.cy ?? 0) + 14}
                           className="fill-muted-foreground text-xs"
                         >
-                          Total dépenses
+                          {t.dashboard.totalExpenses}
                         </tspan>
                       </text>
                     )
@@ -121,7 +130,7 @@ export function ExpenseChart() {
                 style={{ backgroundColor: entry.fill }}
               />
               <span className="flex-1 truncate text-muted-foreground">
-                {entry.category}
+                {t.categories[entry.category]}
               </span>
               <span className="font-mono font-medium tabular-nums">
                 {formatEuro(entry.amount)}

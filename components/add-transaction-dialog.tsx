@@ -34,36 +34,54 @@ import {
   ToggleGroup,
   ToggleGroupItem,
 } from "@/components/ui/toggle-group"
+import { useTranslation } from "@/lib/i18n/context"
+import {
+  ALL_PAYMENT_METHODS,
+  ASSIGNABLE_CATEGORIES,
+  type Category,
+  type PaymentMethod,
+  type TransactionType,
+} from "@/lib/mock-data"
+import { useTransactionsStore } from "@/lib/transactions-store"
 
-const categories = [
-  "Cotisations",
-  "Licences",
-  "Équipements",
-  "Location salle",
-  "Compétitions",
-  "Subventions",
-  "Assurance",
-  "Stages & événements",
-  "Frais bancaires",
-]
-
-const methods = [
-  { value: "especes", label: "Espèces" },
-  { value: "cheque", label: "Chèque" },
-  { value: "virement", label: "Virement" },
-  { value: "stripe", label: "Stripe" },
-]
+const emptyForm = {
+  description: "",
+  amount: "",
+  date: new Date().toISOString().slice(0, 10),
+  category: "Cotisations" as Category,
+  method: "especes" as PaymentMethod,
+  member: "",
+}
 
 export function AddTransactionDialog({
   trigger,
 }: {
   trigger?: React.ReactNode
 }) {
+  const { t } = useTranslation()
+  const { addTransaction, available } = useTransactionsStore()
   const [open, setOpen] = useState(false)
-  const [type, setType] = useState("entree")
+  const [type, setType] = useState<TransactionType>("entree")
+  const [form, setForm] = useState(emptyForm)
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
+    if (!available) {
+      toast.error(t.settings.electronOnlyFeature)
+      return
+    }
+    await addTransaction({
+      description: form.description,
+      amount: Number(form.amount),
+      date: new Date(form.date).toISOString(),
+      category: form.category,
+      method: form.method,
+      member: form.member || null,
+      type,
+      status: "valide",
+    })
+    setForm(emptyForm)
+    setType("entree")
     setOpen(false)
     toast.success("Transaction enregistrée", {
       description: "L'écriture a été ajoutée au journal comptable.",
@@ -79,7 +97,7 @@ export function AddTransactionDialog({
           ) : (
             <Button>
               <PlusIcon data-icon="inline-start" />
-              Ajouter une transaction
+              {t.transactions.addTransaction}
             </Button>
           )
         }
@@ -98,14 +116,14 @@ export function AddTransactionDialog({
               <FieldLabel>Sens de l&apos;opération</FieldLabel>
               <ToggleGroup
                 value={[type]}
-                onValueChange={(v) => v[0] && setType(v[0])}
+                onValueChange={(v) => v[0] && setType(v[0] as TransactionType)}
                 className="w-full"
               >
                 <ToggleGroupItem value="entree" className="flex-1">
-                  Entrée
+                  {t.transactionDetail.directionIn}
                 </ToggleGroupItem>
                 <ToggleGroupItem value="sortie" className="flex-1">
-                  Sortie
+                  {t.transactionDetail.directionOut}
                 </ToggleGroupItem>
               </ToggleGroup>
             </Field>
@@ -116,6 +134,8 @@ export function AddTransactionDialog({
                 id="tx-desc"
                 placeholder="Ex. Cotisation annuelle — Jean Dupont"
                 required
+                value={form.description}
+                onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
               />
             </Field>
 
@@ -129,26 +149,38 @@ export function AddTransactionDialog({
                   min="0"
                   placeholder="0,00"
                   required
+                  value={form.amount}
+                  onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value }))}
                 />
               </Field>
               <Field>
-                <FieldLabel htmlFor="tx-date">Date</FieldLabel>
-                <Input id="tx-date" type="date" required />
+                <FieldLabel htmlFor="tx-date">{t.transactionDetail.date}</FieldLabel>
+                <Input
+                  id="tx-date"
+                  type="date"
+                  required
+                  value={form.date}
+                  onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))}
+                />
               </Field>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
               <Field>
-                <FieldLabel>Catégorie</FieldLabel>
-                <Select defaultValue="Cotisations">
+                <FieldLabel>{t.transactionDetail.category}</FieldLabel>
+                <Select
+                  defaultValue="Cotisations"
+                  value={form.category}
+                  onValueChange={(v) => v && setForm((f) => ({ ...f, category: v as Category }))}
+                >
                   <SelectTrigger>
                     <SelectValue placeholder="Choisir" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectGroup>
-                      {categories.map((c) => (
+                      {ASSIGNABLE_CATEGORIES.map((c) => (
                         <SelectItem key={c} value={c}>
-                          {c}
+                          {t.categories[c]}
                         </SelectItem>
                       ))}
                     </SelectGroup>
@@ -156,16 +188,20 @@ export function AddTransactionDialog({
                 </Select>
               </Field>
               <Field>
-                <FieldLabel>Moyen de paiement</FieldLabel>
-                <Select items={methods} defaultValue="especes">
+                <FieldLabel>{t.transactionDetail.method}</FieldLabel>
+                <Select
+                  defaultValue="especes"
+                  value={form.method}
+                  onValueChange={(v) => v && setForm((f) => ({ ...f, method: v as PaymentMethod }))}
+                >
                   <SelectTrigger>
                     <SelectValue placeholder="Choisir" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectGroup>
-                      {methods.map((m) => (
-                        <SelectItem key={m.value} value={m.value}>
-                          {m.label}
+                      {ALL_PAYMENT_METHODS.map((m) => (
+                        <SelectItem key={m} value={m}>
+                          {t.methods[m]}
                         </SelectItem>
                       ))}
                     </SelectGroup>
@@ -176,7 +212,12 @@ export function AddTransactionDialog({
 
             <Field>
               <FieldLabel htmlFor="tx-member">Adhérent lié (optionnel)</FieldLabel>
-              <Input id="tx-member" placeholder="Nom de l'adhérent" />
+              <Input
+                id="tx-member"
+                placeholder="Nom de l'adhérent"
+                value={form.member}
+                onChange={(e) => setForm((f) => ({ ...f, member: e.target.value }))}
+              />
               <FieldDescription>
                 Rattachez l&apos;écriture à un adhérent pour le suivi des cotisations.
               </FieldDescription>
@@ -184,8 +225,8 @@ export function AddTransactionDialog({
           </FieldGroup>
 
           <DialogFooter>
-            <DialogClose render={<Button variant="outline">Annuler</Button>} />
-            <Button type="submit">Enregistrer</Button>
+            <DialogClose render={<Button variant="outline">{t.common.cancel}</Button>} />
+            <Button type="submit">{t.common.save}</Button>
           </DialogFooter>
         </form>
       </DialogContent>

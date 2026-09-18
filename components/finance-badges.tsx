@@ -1,11 +1,7 @@
 import { cn } from "@/lib/utils"
 import { Badge } from "@/components/ui/badge"
-import {
-  type PaymentMethod,
-  type TransactionStatus,
-  methodLabels,
-  statusLabels,
-} from "@/lib/mock-data"
+import { useTranslation } from "@/lib/i18n/context"
+import { type PaymentMethod, type TransactionStatus } from "@/lib/mock-data"
 
 const methodStyles: Record<PaymentMethod, string> = {
   stripe:
@@ -19,21 +15,23 @@ const methodStyles: Record<PaymentMethod, string> = {
 }
 
 export function MethodBadge({ method }: { method: PaymentMethod }) {
+  const { t } = useTranslation()
   return (
     <Badge variant="outline" className={cn("font-medium", methodStyles[method])}>
-      {methodLabels[method]}
+      {t.methods[method]}
     </Badge>
   )
 }
 
 export function StatusBadge({ status }: { status: TransactionStatus }) {
+  const { t } = useTranslation()
   if (status === "valide") {
     return (
       <Badge
         variant="outline"
         className="border-transparent bg-success/12 font-medium text-success dark:text-[oklch(0.72_0.14_155)]"
       >
-        {statusLabels[status]}
+        {t.statuses[status]}
       </Badge>
     )
   }
@@ -43,7 +41,7 @@ export function StatusBadge({ status }: { status: TransactionStatus }) {
         variant="outline"
         className="border-transparent bg-muted font-medium text-muted-foreground"
       >
-        {statusLabels[status]}
+        {t.statuses[status]}
       </Badge>
     )
   }
@@ -52,7 +50,7 @@ export function StatusBadge({ status }: { status: TransactionStatus }) {
       variant="outline"
       className="border-transparent bg-warning/20 font-medium text-[oklch(0.45_0.12_55)] dark:text-[oklch(0.82_0.14_65)]"
     >
-      {statusLabels[status]}
+      {t.statuses[status]}
     </Badge>
   )
 }

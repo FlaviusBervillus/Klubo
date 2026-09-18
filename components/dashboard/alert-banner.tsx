@@ -5,60 +5,38 @@ import { TriangleAlertIcon, ArrowRightIcon } from "lucide-react"
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
-import { backup, toCategorizeCount, hoursSince } from "@/lib/mock-data"
+import { useTranslation } from "@/lib/i18n/context"
+import { useTransactionsStore } from "@/lib/transactions-store"
 
 export function AlertBanner() {
-  const backupHours = hoursSince(backup.lastBackupAt)
-  const backupStale = backupHours > 48
-  const hasCategorize = toCategorizeCount > 0
+  const { t } = useTranslation()
+  const { transactions } = useTransactionsStore()
+  const toCategorizeCount = transactions.filter((tx) => tx.status === "a_categoriser").length
 
-  if (!backupStale && !hasCategorize) return null
-
-  const messages: string[] = []
-  if (hasCategorize) {
-    messages.push(
-      `${toCategorizeCount} transaction${toCategorizeCount > 1 ? "s" : ""} Stripe à catégoriser`,
-    )
-  }
-  if (backupStale) {
-    messages.push(
-      `dernière sauvegarde Mega il y a ${Math.round(backupHours / 24)} jours`,
-    )
-  }
+  if (toCategorizeCount === 0) return null
 
   return (
     <Alert className="border-warning/40 bg-warning/10 [&>svg]:text-[oklch(0.55_0.15_60)] dark:[&>svg]:text-[oklch(0.8_0.14_65)]">
       <TriangleAlertIcon />
       <AlertTitle className="text-[oklch(0.42_0.12_55)] dark:text-[oklch(0.85_0.13_65)]">
-        Actions requises
+        {t.dashboard.actionsRequired}
       </AlertTitle>
       <AlertDescription className="text-[oklch(0.45_0.08_55)] dark:text-[oklch(0.82_0.1_65)]">
-        <span className="capitalize">{messages.join(" · ")}.</span>
+        <span>
+          {toCategorizeCount} transaction{toCategorizeCount > 1 ? "s" : ""} à catégoriser.
+        </span>
       </AlertDescription>
       <div className="mt-2 flex flex-wrap gap-2 group-has-[>svg]/alert:col-start-2">
-        {hasCategorize ? (
-          <Button
-            size="sm"
-            variant="outline"
-            nativeButton={false}
-            className="border-warning/40 bg-background"
-            render={<Link href="/transactions?statut=a_categoriser" />}
-          >
-            Catégoriser
-            <ArrowRightIcon data-icon="inline-end" />
-          </Button>
-        ) : null}
-        {backupStale ? (
-          <Button
-            size="sm"
-            variant="outline"
-            nativeButton={false}
-            className="border-warning/40 bg-background"
-            render={<Link href="/parametres" />}
-          >
-            Lancer une sauvegarde
-          </Button>
-        ) : null}
+        <Button
+          size="sm"
+          variant="outline"
+          nativeButton={false}
+          className="border-warning/40 bg-background"
+          render={<Link href="/transactions?statut=a_categoriser" />}
+        >
+          {t.dashboard.categorize}
+          <ArrowRightIcon data-icon="inline-end" />
+        </Button>
       </div>
     </Alert>
   )

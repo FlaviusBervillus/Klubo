@@ -5,11 +5,16 @@ import { usePathname } from "next/navigation"
 import {
   LayoutDashboardIcon,
   ReceiptTextIcon,
+  UsersIcon,
+  UserCogIcon,
   FileBarChartIcon,
   SettingsIcon,
   SwordIcon,
+  LogOutIcon,
 } from "lucide-react"
 
+import { AccountDialog } from "@/components/account/account-dialog"
+import { Button } from "@/components/ui/button"
 import {
   Sidebar,
   SidebarContent,
@@ -22,34 +27,60 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar"
-import { CLUB, toCategorizeCount } from "@/lib/mock-data"
+import { useAuth } from "@/lib/auth-context"
+import { useClubSettings } from "@/lib/club-settings"
+import { useTranslation } from "@/lib/i18n/context"
+import { normalizePathname } from "@/lib/utils"
+import { useTransactionsStore } from "@/lib/transactions-store"
 
-const nav = [
-  { title: "Tableau de bord", href: "/", icon: LayoutDashboardIcon },
-  {
-    title: "Transactions",
-    href: "/transactions",
-    icon: ReceiptTextIcon,
-    badge: toCategorizeCount,
-  },
-  { title: "Rapports & exports", href: "/rapports", icon: FileBarChartIcon },
-  { title: "Paramètres", href: "/parametres", icon: SettingsIcon },
-]
+const SETTINGS_ROLES = ["admin", "tresorier", "president"]
 
 export function AppSidebar() {
-  const pathname = usePathname()
+  const pathname = normalizePathname(usePathname())
+  const { session, logout } = useAuth()
+  const { t } = useTranslation()
+  const { settings } = useClubSettings()
+  const { transactions } = useTransactionsStore()
+  const toCategorizeCount = transactions.filter((t) => t.status === "a_categoriser").length
+
+  const nav = [
+    { title: t.nav.dashboard, href: "/", icon: LayoutDashboardIcon },
+    {
+      title: t.nav.transactions,
+      href: "/transactions",
+      icon: ReceiptTextIcon,
+      badge: toCategorizeCount,
+    },
+    { title: t.nav.clients, href: "/clients", icon: UsersIcon },
+    { title: t.nav.reports, href: "/rapports", icon: FileBarChartIcon },
+    ...(session && SETTINGS_ROLES.includes(session.role)
+      ? [{ title: t.nav.settings, href: "/parametres", icon: SettingsIcon }]
+      : []),
+    ...(session?.role === "admin"
+      ? [{ title: t.nav.users, href: "/utilisateurs", icon: UserCogIcon }]
+      : []),
+  ]
 
   return (
     <Sidebar>
       <SidebarHeader>
         <div className="flex items-center gap-3 px-2 py-3">
-          <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
-            <SwordIcon className="size-5" />
+          <div className="flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
+            {settings.logoUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={settings.logoUrl}
+                alt={settings.name}
+                className="size-full object-cover"
+              />
+            ) : (
+              <SwordIcon className="size-5" />
+            )}
           </div>
           <div className="flex flex-col leading-tight">
-            <span className="text-sm font-semibold">{CLUB.name}</span>
+            <span className="text-sm font-semibold">{settings.name}</span>
             <span className="text-xs text-sidebar-foreground/60">
-              Comptabilité · {CLUB.season}
+              {settings.season}
             </span>
           </div>
         </div>
@@ -85,16 +116,47 @@ export function AppSidebar() {
       </SidebarContent>
 
       <SidebarFooter>
-        <div className="flex items-center gap-3 rounded-lg bg-sidebar-accent px-3 py-2.5">
-          <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-sidebar-primary/20 text-xs font-semibold text-sidebar-primary-foreground">
-            ML
+        {session ? (
+          <div className="flex items-center gap-1 rounded-lg bg-sidebar-accent px-1 py-1.5">
+            <AccountDialog
+              trigger={
+                <button
+                  type="button"
+                  className="flex flex-1 items-center gap-3 rounded-md px-2 py-1 text-left hover:bg-sidebar-primary/10"
+                >
+                  <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-sidebar-primary/20 text-xs font-semibold text-sidebar-primary-foreground">
+                    {initials(session.name)}
+                  </span>
+                  <span className="flex flex-1 flex-col leading-tight">
+                    <span className="text-sm font-medium">{session.name}</span>
+                    <span className="text-xs text-sidebar-foreground/60">
+                      {t.roles[session.role]}
+                    </span>
+                  </span>
+                </button>
+              }
+            />
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label={t.common.logout}
+              onClick={logout}
+            >
+              <LogOutIcon />
+            </Button>
           </div>
-          <div className="flex flex-col leading-tight">
-            <span className="text-sm font-medium">{CLUB.treasurer}</span>
-            <span className="text-xs text-sidebar-foreground/60">Trésorière</span>
-          </div>
-        </div>
+        ) : null}
       </SidebarFooter>
     </Sidebar>
   )
+}
+
+function initials(name: string) {
+  return name
+    .split(" ")
+    .map((part) => part[0])
+    .filter(Boolean)
+    .slice(0, 2)
+    .join("")
+    .toUpperCase()
 }

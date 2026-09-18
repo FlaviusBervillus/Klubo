@@ -1,3 +1,6 @@
+"use client"
+
+import { useEffect, useState } from "react"
 import {
   BanknoteIcon,
   LandmarkIcon,
@@ -13,10 +16,34 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
-import { balances, formatEuro, formatDate } from "@/lib/mock-data"
+import { computeAccountBalance } from "@/lib/dashboard-stats"
+import { useTranslation } from "@/lib/i18n/context"
+import { formatEuro } from "@/lib/mock-data"
+import { useTransactionsStore } from "@/lib/transactions-store"
+
+function api() {
+  return typeof window !== "undefined" ? window.electronAPI : undefined
+}
 
 export function BalanceCards() {
-  const ecart = balances.ecart
+  const { t } = useTranslation()
+  const { transactions } = useTransactionsStore()
+  const [bankBalance, setBankBalance] = useState<number | null>(null)
+
+  useEffect(() => {
+    async function loadBankBalance() {
+      const electronApi = api()
+      if (!electronApi) return
+      const rows = await electronApi.db.getBankTransactions()
+      if (rows.length === 0) return
+      setBankBalance(rows.reduce((sum, row) => sum + row.amount, 0))
+    }
+    loadBankBalance()
+  }, [])
+
+  const comptable = computeAccountBalance(transactions)
+  const bancaire = bankBalance ?? comptable
+  const ecart = Math.round((bancaire - comptable) * 100) / 100
   const balanced = Math.abs(ecart) < 0.01
 
   return (
@@ -25,15 +52,15 @@ export function BalanceCards() {
         <CardHeader>
           <CardDescription className="flex items-center gap-2">
             <BanknoteIcon className="size-4" />
-            Solde comptable
+            {t.dashboard.accountBalance}
           </CardDescription>
           <CardTitle className="font-mono text-3xl tabular-nums">
-            {formatEuro(balances.comptable)}
+            {formatEuro(comptable)}
           </CardTitle>
         </CardHeader>
         <CardContent>
           <p className="text-xs text-muted-foreground">
-            Calculé depuis le journal des écritures
+            {t.dashboard.accountBalanceHint}
           </p>
         </CardContent>
       </Card>
@@ -42,15 +69,17 @@ export function BalanceCards() {
         <CardHeader>
           <CardDescription className="flex items-center gap-2">
             <LandmarkIcon className="size-4" />
-            Solde bancaire réel
+            {t.dashboard.bankBalance}
           </CardDescription>
           <CardTitle className="font-mono text-3xl tabular-nums">
-            {formatEuro(balances.bancaire)}
+            {formatEuro(bancaire)}
           </CardTitle>
         </CardHeader>
         <CardContent>
           <p className="text-xs text-muted-foreground">
-            Synchronisé via GoCardless · {formatDate(balances.lastReconciliation)}
+            {bankBalance !== null
+              ? t.dashboard.bankBalanceHint
+              : t.settings.electronOnlyFeature}
           </p>
         </CardContent>
       </Card>
@@ -66,7 +95,7 @@ export function BalanceCards() {
         <CardHeader>
           <CardDescription className="flex items-center gap-2">
             <ScaleIcon className="size-4" />
-            Écart de solde
+            {t.dashboard.balanceGap}
           </CardDescription>
           <CardTitle
             className={cn(
@@ -82,9 +111,7 @@ export function BalanceCards() {
         </CardHeader>
         <CardContent>
           <p className="text-xs text-muted-foreground">
-            {balanced
-              ? "Comptabilité et banque rapprochées"
-              : "Rapprochement bancaire nécessaire"}
+            {balanced ? t.dashboard.balanceGapOk : t.dashboard.balanceGapKo}
           </p>
         </CardContent>
       </Card>
