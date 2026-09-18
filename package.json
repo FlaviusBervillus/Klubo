@@ -64,7 +64,8 @@
     "publish": {
       "provider": "github",
       "owner": "FlaviusBervillus",
-      "repo": "kung-fu-accounting-dashboard"
+      "repo": "kung-fu-accounting-dashboard",
+      "releaseType": "release"
     },
     "mac": {
       "category": "public.app-category.finance",
