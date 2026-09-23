@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
-import { ImageUpIcon, SwordIcon, XIcon } from "lucide-react"
+import { ImageUpIcon, StampIcon, SwordIcon, XIcon } from "lucide-react"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
@@ -16,6 +16,69 @@ import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { useClubSettings } from "@/lib/club-settings"
 import { useTranslation } from "@/lib/i18n/context"
+
+function ImageFieldUpload({
+  label,
+  value,
+  onChange,
+  changeLabel,
+  removeLabel,
+}: {
+  label: string
+  value: string | null
+  onChange: (dataUrl: string | null) => void
+  changeLabel: string
+  removeLabel: string
+}) {
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = () => onChange(String(reader.result))
+    reader.readAsDataURL(file)
+    e.target.value = ""
+  }
+
+  return (
+    <Field>
+      <FieldLabel>{label}</FieldLabel>
+      <div className="flex items-center gap-3">
+        <div className="flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-lg border bg-muted">
+          {value ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={value} alt={label} className="size-full object-contain" />
+          ) : (
+            <StampIcon className="size-6 text-muted-foreground" />
+          )}
+        </div>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={handleChange}
+        />
+        <Button type="button" variant="outline" size="sm" onClick={() => fileInputRef.current?.click()}>
+          <ImageUpIcon data-icon="inline-start" />
+          {changeLabel}
+        </Button>
+        {value ? (
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            aria-label={removeLabel}
+            onClick={() => onChange(null)}
+          >
+            <XIcon />
+          </Button>
+        ) : null}
+      </div>
+    </Field>
+  )
+}
 
 export function ClubIdentityCard() {
   const { t } = useTranslation()
@@ -178,6 +241,22 @@ export function ClubIdentityCard() {
                 placeholder="W442029842"
               />
             </Field>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <ImageFieldUpload
+                label={t.settings.fieldStamp}
+                changeLabel={t.settings.changeStamp}
+                removeLabel={t.settings.removeStamp}
+                value={settings.stampUrl}
+                onChange={(url) => update({ stampUrl: url })}
+              />
+              <ImageFieldUpload
+                label={t.settings.fieldSignature}
+                changeLabel={t.settings.changeSignature}
+                removeLabel={t.settings.removeSignature}
+                value={settings.signatureUrl}
+                onChange={(url) => update({ signatureUrl: url })}
+              />
+            </div>
             <Button type="submit" className="w-fit">
               {t.common.save}
             </Button>

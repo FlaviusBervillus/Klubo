@@ -10,6 +10,8 @@ export interface ClubSettings {
   address: string
   phone: string
   rna: string
+  stampUrl: string | null
+  signatureUrl: string | null
 }
 
 const defaultSettings: ClubSettings = {
@@ -20,6 +22,8 @@ const defaultSettings: ClubSettings = {
   address: "",
   phone: "",
   rna: "",
+  stampUrl: null,
+  signatureUrl: null,
 }
 
 function api() {
@@ -49,6 +53,8 @@ export function ClubSettingsProvider({ children }: { children: React.ReactNode }
           address: row.clubAddress ?? "",
           phone: row.clubPhone ?? "",
           rna: row.clubRna ?? "",
+          stampUrl: row.clubStampUrl ?? null,
+          signatureUrl: row.clubSignatureUrl ?? null,
         })
       }
       setLoaded(true)
@@ -72,6 +78,12 @@ export function ClubSettingsProvider({ children }: { children: React.ReactNode }
     if (patch.address !== undefined) await electronApi.db.setSetting("clubAddress", patch.address)
     if (patch.phone !== undefined) await electronApi.db.setSetting("clubPhone", patch.phone)
     if (patch.rna !== undefined) await electronApi.db.setSetting("clubRna", patch.rna)
+    if (patch.stampUrl !== undefined) {
+      await electronApi.db.setSetting("clubStampUrl", patch.stampUrl ?? "")
+    }
+    if (patch.signatureUrl !== undefined) {
+      await electronApi.db.setSetting("clubSignatureUrl", patch.signatureUrl ?? "")
+    }
   }
 
   return (

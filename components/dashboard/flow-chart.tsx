@@ -19,11 +19,11 @@ import {
 } from "@/components/ui/chart"
 import { computeMonthlyFlow } from "@/lib/dashboard-stats"
 import { useTranslation } from "@/lib/i18n/context"
-import { useTransactionsStore } from "@/lib/transactions-store"
+import { useSeasonTransactions } from "@/lib/seasons-store"
 
 export function FlowChart() {
   const { t } = useTranslation()
-  const { transactions } = useTransactionsStore()
+  const transactions = useSeasonTransactions()
   const monthlyFlow = computeMonthlyFlow(transactions)
   const chartConfig = {
     entrees: { label: t.dashboard.flowIn, color: "var(--chart-5)" },

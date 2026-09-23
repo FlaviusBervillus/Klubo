@@ -22,15 +22,17 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { computeCategoryPivot } from "@/lib/dashboard-stats"
+import {
+  buildRecentMonthBuckets,
+  buildSeasonMonthBuckets,
+  computeCategoryPivot,
+} from "@/lib/dashboard-stats"
 import { useClubSettings } from "@/lib/club-settings"
 import { useTranslation } from "@/lib/i18n/context"
 import { formatEuro } from "@/lib/mock-data"
-import { useTransactionsStore } from "@/lib/transactions-store"
+import { useSeasonTransactions, useSeasons } from "@/lib/seasons-store"
 
 type Period = "mois" | "trimestre" | "annee"
-
-const MONTHS_IN_YEAR = 6
 
 function sum(values: number[]) {
   return values.reduce((total, value) => total + value, 0)
@@ -39,7 +41,8 @@ function sum(values: number[]) {
 export function FinancialReport() {
   const { t } = useTranslation()
   const { settings } = useClubSettings()
-  const { transactions } = useTransactionsStore()
+  const transactions = useSeasonTransactions()
+  const { activeSeason } = useSeasons()
   const [period, setPeriod] = useState<Period>("annee")
   const [bankBalance, setBankBalance] = useState<number | null>(null)
   const [bankAvailable, setBankAvailable] = useState(false)
@@ -61,24 +64,30 @@ export function FinancialReport() {
     loadBankBalance()
   }, [])
 
+  const monthBuckets = useMemo(
+    () => (activeSeason ? buildSeasonMonthBuckets(activeSeason) : buildRecentMonthBuckets(6)),
+    [activeSeason],
+  )
+  const totalMonths = monthBuckets.length
+
   const periodOptions: { value: Period; label: string; count: number }[] = [
-    { value: "mois", label: t.reports.periodMonth, count: 1 },
-    { value: "trimestre", label: t.reports.periodQuarter, count: 3 },
-    { value: "annee", label: t.reports.periodYear, count: MONTHS_IN_YEAR },
+    { value: "mois", label: t.reports.periodMonth, count: Math.min(1, totalMonths) },
+    { value: "trimestre", label: t.reports.periodQuarter, count: Math.min(3, totalMonths) },
+    { value: "annee", label: t.reports.periodYear, count: totalMonths },
   ]
 
   const count = periodOptions.find((p) => p.value === period)!.count
 
   const fullRevenue = useMemo(
-    () => computeCategoryPivot(transactions, "entree", MONTHS_IN_YEAR),
-    [transactions],
+    () => computeCategoryPivot(transactions, "entree", monthBuckets),
+    [transactions, monthBuckets],
   )
   const fullExpense = useMemo(
-    () => computeCategoryPivot(transactions, "sortie", MONTHS_IN_YEAR),
-    [transactions],
+    () => computeCategoryPivot(transactions, "sortie", monthBuckets),
+    [transactions, monthBuckets],
   )
 
-  const start = MONTHS_IN_YEAR - count
+  const start = totalMonths - count
   const months = fullRevenue.months.slice(start)
   const revenue = fullRevenue.rows.map((r) => ({
     category: r.category,
@@ -160,7 +169,7 @@ export function FinancialReport() {
           <CardHeader>
             <CardTitle>{t.reports.tableTitle}</CardTitle>
             <CardDescription>
-              {settings.season} · {months[0]}
+              {activeSeason?.label ?? settings.season ?? t.seasons.allTime} · {months[0]}
               {months.length > 1 ? ` – ${months[months.length - 1]}` : ""}
             </CardDescription>
           </CardHeader>

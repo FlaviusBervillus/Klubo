@@ -27,6 +27,7 @@ import {
 } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
 import { useClientsStore } from "@/lib/clients-store"
+import { useSeasonClients } from "@/lib/seasons-store"
 import { useTranslation } from "@/lib/i18n/context"
 import {
   ALL_COURSE_TYPES,
@@ -61,6 +62,7 @@ function formFromClient(client: Client) {
 export function AddClientDialog({ client }: { client?: Client } = {}) {
   const { t } = useTranslation()
   const { addClient, updateClient, available } = useClientsStore()
+  const { setClientSeasonInfo, hasActiveSeason } = useSeasonClients()
   const [open, setOpen] = useState(false)
   const [form, setForm] = useState(client ? formFromClient(client) : emptyForm)
   const isEdit = !!client
@@ -78,8 +80,18 @@ export function AddClientDialog({ client }: { client?: Client } = {}) {
       return
     }
     if (isEdit) {
-      await updateClient(client.id, form)
+      const { status, paid, ...identity } = form
+      await updateClient(client.id, identity)
+      // Le cours et le paiement sont propres à la saison active ; sans saison sélectionnée,
+      // on garde l'ancien comportement (écriture directe sur la fiche client).
+      if (hasActiveSeason) {
+        await setClientSeasonInfo(client.id, { status, paid })
+      } else {
+        await updateClient(client.id, { status, paid })
+      }
     } else {
+      // À la création, le cours/paiement saisis deviennent la valeur par défaut de la fiche,
+      // reprise pour la saison active tant qu'aucune valeur n'a été fixée explicitement pour elle.
       await addClient(form)
       setForm(emptyForm)
     }

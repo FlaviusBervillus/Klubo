@@ -108,6 +108,22 @@ async function syncCharges(secretKey) {
         })
         db.applyDetectedCourseType({ email, firstName, lastName, courseType })
       }
+
+      // Stripe génère lui-même une vraie facture pour les charges issues de Stripe Invoicing :
+      // on la préfère toujours à celle qu'on génère nous-mêmes (voir main.js, receipts:download).
+      if (charge.invoice) {
+        const existing = db.getTransactionById(`stripe_${charge.id}`)
+        if (!existing?.stripe_invoice_pdf_url) {
+          try {
+            const invoice = await stripeRequest(`/v1/invoices/${charge.invoice}`, secretKey)
+            if (invoice.invoice_pdf) {
+              db.updateTransaction(`stripe_${charge.id}`, { stripeInvoicePdfUrl: invoice.invoice_pdf })
+            }
+          } catch {
+            // Pas grave : on retombera sur la facture générée par l'app pour cette transaction.
+          }
+        }
+      }
     }
     imported++
   }

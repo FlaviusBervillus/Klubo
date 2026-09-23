@@ -45,6 +45,7 @@ export interface DbTransaction {
   stripe_fee: number | null
   stripe_net: number | null
   stripe_raw_json: string | null
+  stripe_invoice_pdf_url: string | null
 }
 
 export interface DbBankTransaction {
@@ -60,6 +61,13 @@ export interface VaultRow {
   salt_b64: string
   iv_b64: string
   ciphertext_b64: string
+}
+
+export interface DbSeason {
+  id: string
+  label: string
+  start_date: string
+  end_date: string
 }
 
 declare global {
@@ -90,6 +98,22 @@ declare global {
         getSyncState: (
           provider: string,
         ) => Promise<{ cursor: string | null; last_synced_at: string } | null>
+
+        getSeasons: () => Promise<DbSeason[]>
+        createSeason: (season: { id?: string; label: string; startDate: string; endDate: string }) => Promise<void>
+        updateSeason: (
+          id: string,
+          patch: Partial<{ label: string; startDate: string; endDate: string }>,
+        ) => Promise<void>
+        deleteSeason: (id: string) => Promise<void>
+        getClientSeasonMap: (
+          seasonId: string,
+        ) => Promise<Record<string, { status: string; paid: boolean }>>
+        setClientSeason: (
+          clientId: string,
+          seasonId: string,
+          payload: { status: string; paid: boolean },
+        ) => Promise<void>
       }
       vault: {
         read: () => Promise<VaultRow | null>
@@ -100,6 +124,7 @@ declare global {
             ok: true
             tx: { id: string; description: string; amount: number; date: string; method: string }
             client: DbClient | null
+            stripeInvoicePdfUrl: string | null
           }
         | { ok: false; error?: string }
       >
@@ -110,6 +135,9 @@ declare global {
       downloadReceipt: (
         transactionId: string,
         overrides?: ReceiptOverrides,
+      ) => Promise<{ ok: true; path: string } | { ok: false; error?: string; canceled?: boolean }>
+      downloadStripeInvoice: (
+        transactionId: string,
       ) => Promise<{ ok: true; path: string } | { ok: false; error?: string; canceled?: boolean }>
       testStripeConnection: (secretKey: string) => Promise<
         | { ok: true; available: { amount: number; currency: string }[] }

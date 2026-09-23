@@ -71,12 +71,28 @@ function billingAddressLines(tx, client) {
   return lines
 }
 
+/** Montant brut d'origine et montant remboursé, lus dans la charge Stripe brute (tx.amount ne
+ * reflète que ce qu'il reste après un éventuel remboursement, voir stripe-sync.js). */
+function refundInfo(tx) {
+  if (tx.method !== "stripe" || !tx.stripe_raw_json) return { originalGross: tx.amount, refunded: 0 }
+  try {
+    const charge = JSON.parse(tx.stripe_raw_json)
+    return {
+      originalGross: charge.amount != null ? charge.amount / 100 : tx.amount,
+      refunded: charge.amount_refunded ? charge.amount_refunded / 100 : 0,
+    }
+  } catch {
+    return { originalGross: tx.amount, refunded: 0 }
+  }
+}
+
 function renderInvoiceHtml(tx, club, client) {
   const memberName = client ? `${client.first_name} ${client.last_name}`.trim() : tx.member || "Client"
   const addressLines = billingAddressLines(tx, client)
   const clubAddressLines = club.address
     ? club.address.split(",").map((part) => part.trim()).filter(Boolean)
     : []
+  const { originalGross, refunded } = refundInfo(tx)
 
   return `<!DOCTYPE html>
 <html>
@@ -104,6 +120,11 @@ function renderInvoiceHtml(tx, club, client) {
   .totals div { display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px solid #eee; }
   .totals .paid { font-weight: 700; border-bottom: none; margin-top: 4px; }
   .rna { margin-top: 32px; color: #444; }
+  .sign-row { display: flex; justify-content: space-between; align-items: flex-end; margin-top: 48px; }
+  .sign-block { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+  .signature { max-height: 60px; max-width: 160px; object-fit: contain; }
+  .sign-label { font-size: 11px; color: #888; border-top: 1px solid #ddd; padding-top: 4px; width: 160px; text-align: center; }
+  .stamp { max-height: 90px; max-width: 90px; object-fit: contain; }
   .footer { position: fixed; bottom: 24px; left: 48px; right: 48px; border-top: 1px solid #ddd; padding-top: 8px; text-align: right; font-size: 11px; color: #888; }
 </style>
 </head>
@@ -147,19 +168,32 @@ function renderInvoiceHtml(tx, club, client) {
       <tr>
         <td>${escapeHtml(tx.description)}</td>
         <td class="num">1</td>
-        <td class="num">${formatEuro(tx.amount)}</td>
-        <td class="num">${formatEuro(tx.amount)}</td>
+        <td class="num">${formatEuro(originalGross)}</td>
+        <td class="num">${formatEuro(originalGross)}</td>
       </tr>
     </tbody>
   </table>
 
   <div class="totals">
-    <div><span>Sous-total</span><span>${formatEuro(tx.amount)}</span></div>
+    <div><span>Sous-total</span><span>${formatEuro(originalGross)}</span></div>
+    ${refunded > 0 ? `<div><span>Remboursement</span><span>− ${formatEuro(refunded)}</span></div>` : ""}
     <div><span>Total</span><span>${formatEuro(tx.amount)}</span></div>
     <div class="paid"><span>Montant payé</span><span>${formatEuro(tx.amount)}</span></div>
   </div>
 
   ${club.rna ? `<div class="rna">RNA : ${escapeHtml(club.rna)}</div>` : ""}
+
+  ${
+    club.stampUrl || club.signatureUrl
+      ? `<div class="sign-row">
+          <div class="sign-block">
+            ${club.signatureUrl ? `<img class="signature" src="${club.signatureUrl}" alt="" />` : ""}
+            <span class="sign-label">Signature</span>
+          </div>
+          ${club.stampUrl ? `<img class="stamp" src="${club.stampUrl}" alt="" />` : ""}
+        </div>`
+      : ""
+  }
 
   <div class="footer">Page 1 sur 1</div>
 </body>

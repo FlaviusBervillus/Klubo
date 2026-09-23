@@ -29,6 +29,14 @@ contextBridge.exposeInMainWorld("electronAPI", {
     getSettings: () => ipcRenderer.invoke("db:getSettings"),
     setSetting: (key, value) => ipcRenderer.invoke("db:setSetting", key, value),
     getSyncState: (provider) => ipcRenderer.invoke("db:getSyncState", provider),
+
+    getSeasons: () => ipcRenderer.invoke("db:getSeasons"),
+    createSeason: (season) => ipcRenderer.invoke("db:createSeason", season),
+    updateSeason: (id, patch) => ipcRenderer.invoke("db:updateSeason", id, patch),
+    deleteSeason: (id) => ipcRenderer.invoke("db:deleteSeason", id),
+    getClientSeasonMap: (seasonId) => ipcRenderer.invoke("db:getClientSeasonMap", seasonId),
+    setClientSeason: (clientId, seasonId, payload) =>
+      ipcRenderer.invoke("db:setClientSeason", clientId, seasonId, payload),
   },
   vault: {
     read: () => ipcRenderer.invoke("vault:read"),
@@ -39,6 +47,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ipcRenderer.invoke("receipts:render-preview", transactionId, overrides),
   downloadReceipt: (transactionId, overrides) =>
     ipcRenderer.invoke("receipts:download", transactionId, overrides),
+  downloadStripeInvoice: (transactionId) =>
+    ipcRenderer.invoke("receipts:download-stripe-invoice", transactionId),
   testStripeConnection: (secretKey) => ipcRenderer.invoke("stripe:test-connection", secretKey),
   syncStripe: (secretKey) => ipcRenderer.invoke("stripe:sync-all", secretKey),
   gocardless: {

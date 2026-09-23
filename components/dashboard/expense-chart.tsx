@@ -18,7 +18,7 @@ import {
 import { computeExpenseByCategory } from "@/lib/dashboard-stats"
 import { useTranslation } from "@/lib/i18n/context"
 import { formatEuro } from "@/lib/mock-data"
-import { useTransactionsStore } from "@/lib/transactions-store"
+import { useSeasonTransactions } from "@/lib/seasons-store"
 
 const palette = [
   "var(--chart-1)",
@@ -31,7 +31,7 @@ const palette = [
 
 export function ExpenseChart() {
   const { t } = useTranslation()
-  const { transactions } = useTransactionsStore()
+  const transactions = useSeasonTransactions()
   const expenseByCategory = computeExpenseByCategory(transactions)
   const total = expenseByCategory.reduce((s, e) => s + e.amount, 0)
 

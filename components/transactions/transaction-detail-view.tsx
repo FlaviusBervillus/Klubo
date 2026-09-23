@@ -15,7 +15,6 @@ import {
   DownloadIcon,
   CreditCardIcon,
 } from "lucide-react"
-import { toast } from "sonner"
 
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -47,6 +46,7 @@ import { ReceiptPreviewDialog } from "@/components/transactions/receipt-preview-
 import { useClubSettings } from "@/lib/club-settings"
 import { useTranslation } from "@/lib/i18n/context"
 import { formatDate, formatEuro, type Transaction } from "@/lib/mock-data"
+import { downloadReceiptOrOpenPreview } from "@/lib/receipt-actions"
 import { useTransactionsStore } from "@/lib/transactions-store"
 
 export function TransactionDetailView() {
@@ -68,12 +68,17 @@ export function TransactionDetailView() {
 
   const signed = tx.type === "entree" ? tx.amount : -tx.amount
 
+  // tx.amount reflète déjà le montant restant après un éventuel remboursement (voir
+  // stripe-sync.js) : le montant brut d'origine et le montant remboursé se lisent dans le
+  // payload Stripe brut, seule source qui garde la trace de la charge avant remboursement.
+  const stripeRaw = tx.stripe?.raw as { amount?: number; amount_refunded?: number } | undefined
+  const originalGrossAmount = stripeRaw?.amount != null ? stripeRaw.amount / 100 : tx.amount
+  const refundedAmount = stripeRaw?.amount_refunded ? stripeRaw.amount_refunded / 100 : 0
+
+  const txId = tx.id
+
   function openReceiptPreview() {
-    if (typeof window === "undefined" || !window.electronAPI) {
-      toast.error(t.settings.electronOnlyFeature)
-      return
-    }
-    setPreviewOpen(true)
+    downloadReceiptOrOpenPreview(txId, t, () => setPreviewOpen(true))
   }
 
   return (
@@ -206,13 +211,20 @@ export function TransactionDetailView() {
                 <AccordionContent className="flex flex-col gap-4">
                   <div className="grid gap-3 sm:grid-cols-3">
                     <StripeStat label={t.transactionDetail.grossAmount}>
-                      {formatEuro(tx.amount)}
+                      {formatEuro(originalGrossAmount)}
                     </StripeStat>
                     <StripeStat label={t.transactionDetail.stripeFee}>
                       <span className="text-destructive">
                         − {formatEuro(tx.stripe.fee)}
                       </span>
                     </StripeStat>
+                    {refundedAmount > 0 ? (
+                      <StripeStat label={t.transactionDetail.refundedAmount}>
+                        <span className="text-[oklch(0.5_0.15_265)] dark:text-[oklch(0.75_0.12_265)]">
+                          − {formatEuro(refundedAmount)}
+                        </span>
+                      </StripeStat>
+                    ) : null}
                     <StripeStat label={t.transactionDetail.netAmount}>
                       <span className="text-success dark:text-[oklch(0.74_0.14_155)]">
                         {formatEuro(tx.stripe.net)}

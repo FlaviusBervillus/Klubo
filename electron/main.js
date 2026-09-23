@@ -1,6 +1,7 @@
 const { app, BrowserWindow, ipcMain, shell, dialog } = require("electron")
 const path = require("path")
 const fs = require("fs")
+const https = require("https")
 const crypto = require("crypto")
 const { createStaticServer } = require("../scripts/static-server")
 const db = require("./db")
@@ -108,6 +109,17 @@ ipcMain.handle("db:getSettings", () => db.getSettings())
 ipcMain.handle("db:getSyncState", (_e, provider) => db.getSyncState(provider) ?? null)
 ipcMain.handle("db:setSetting", (_e, key, value) => db.setSetting(key, value))
 
+ipcMain.handle("db:getSeasons", () => db.getSeasons())
+ipcMain.handle("db:createSeason", (_e, season) => {
+  db.createSeason({ ...season, id: season.id || crypto.randomUUID() })
+})
+ipcMain.handle("db:updateSeason", (_e, id, patch) => db.updateSeason(id, patch))
+ipcMain.handle("db:deleteSeason", (_e, id) => db.deleteSeason(id))
+ipcMain.handle("db:getClientSeasonMap", (_e, seasonId) => db.getClientSeasonMap(seasonId))
+ipcMain.handle("db:setClientSeason", (_e, clientId, seasonId, payload) =>
+  db.setClientSeason(clientId, seasonId, payload),
+)
+
 ipcMain.handle("vault:read", () => db.getVault() ?? null)
 ipcMain.handle("vault:write", (_e, payload) => db.setVault(payload))
 
@@ -121,6 +133,8 @@ function getClubSettings() {
     phone: settings.clubPhone || "",
     rna: settings.clubRna || "",
     logoUrl: settings.clubLogoUrl || null,
+    stampUrl: settings.clubStampUrl || null,
+    signatureUrl: settings.clubSignatureUrl || null,
   }
 }
 
@@ -144,6 +158,52 @@ ipcMain.handle("receipts:prepare", (_e, transactionId) => {
     ok: true,
     tx: { id: tx.id, description: tx.description, amount: tx.amount, date: tx.date, method: tx.method },
     client: client ?? null,
+    stripeInvoicePdfUrl: tx.stripe_invoice_pdf_url || null,
+  }
+})
+
+/** Suit les redirections (les liens de facture Stripe en font parfois vers un CDN). */
+function downloadUrlToBuffer(url, redirectsLeft = 5) {
+  return new Promise((resolve, reject) => {
+    https
+      .get(url, (res) => {
+        if (res.statusCode && res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+          if (redirectsLeft <= 0) return reject(new Error("Trop de redirections"))
+          res.resume()
+          resolve(downloadUrlToBuffer(res.headers.location, redirectsLeft - 1))
+          return
+        }
+        if (res.statusCode !== 200) {
+          res.resume()
+          reject(new Error(`Téléchargement de la facture Stripe échoué (HTTP ${res.statusCode})`))
+          return
+        }
+        const chunks = []
+        res.on("data", (chunk) => chunks.push(chunk))
+        res.on("end", () => resolve(Buffer.concat(chunks)))
+        res.on("error", reject)
+      })
+      .on("error", reject)
+  })
+}
+
+/** Télécharge la vraie facture PDF émise par Stripe (Stripe Invoicing) pour une transaction. */
+ipcMain.handle("receipts:download-stripe-invoice", async (_e, transactionId) => {
+  try {
+    const tx = db.getTransactionById(transactionId)
+    if (!tx?.stripe_invoice_pdf_url) return { ok: false, error: "Aucune facture Stripe pour cette transaction" }
+    const pdfBuffer = await downloadUrlToBuffer(tx.stripe_invoice_pdf_url)
+    const safeName = (tx.member || tx.id).replace(/[^a-zA-Z0-9]+/g, "_")
+    const { canceled, filePath } = await dialog.showSaveDialog(mainWindow, {
+      title: "Enregistrer la facture Stripe",
+      defaultPath: `Facture_Stripe_${safeName}.pdf`,
+      filters: [{ name: "PDF", extensions: ["pdf"] }],
+    })
+    if (canceled || !filePath) return { ok: false, canceled: true }
+    fs.writeFileSync(filePath, pdfBuffer)
+    return { ok: true, path: filePath }
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) }
   }
 })
 
@@ -193,6 +253,28 @@ ipcMain.handle("receipts:download", async (_e, transactionId, overrides) => {
   }
 })
 
+/**
+ * Une fois la saison active terminée, on exige une sauvegarde Mega (donc un point de
+ * restauration sûr) avant d'accepter d'y mélanger les paiements de la saison suivante.
+ * Renvoie un message d'erreur si la synchro doit être bloquée, sinon null.
+ */
+function requireBackupBeforeStripeSync() {
+  const settings = db.getSettings()
+  const activeSeasonId = settings.activeSeasonId
+  if (!activeSeasonId) return null
+  const season = db.getSeasons().find((s) => s.id === activeSeasonId)
+  if (!season) return null
+
+  const today = new Date().toISOString().slice(0, 10)
+  if (today <= season.end_date) return null // saison encore en cours
+
+  const megaState = db.getSyncState("mega")
+  if (!megaState?.last_synced_at || megaState.last_synced_at < season.end_date) {
+    return `La saison "${season.label}" est terminée : faites une sauvegarde Mega avant de synchroniser Stripe pour la nouvelle saison (Paramètres → Sauvegarde).`
+  }
+  return null
+}
+
 /* ---------- IPC : Stripe ---------- */
 ipcMain.handle("stripe:test-connection", async (_event, secretKey) => {
   if (!secretKey || typeof secretKey !== "string") {
@@ -207,6 +289,8 @@ ipcMain.handle("stripe:test-connection", async (_event, secretKey) => {
 })
 
 ipcMain.handle("stripe:sync-all", async (_event, secretKey) => {
+  const blockReason = requireBackupBeforeStripeSync()
+  if (blockReason) return { ok: false, error: blockReason }
   try {
     const result = await stripeSync.syncAll(secretKey)
     return { ok: true, ...result }

@@ -53,19 +53,40 @@ export function computeExpenseByCategory(transactions: Transaction[]) {
     .sort((a, b) => b.amount - a.amount)
 }
 
-/** Tableau croisé catégorie × mois pour un sens donné (entrée/sortie), sur les N derniers mois. */
+/** Mois calendaires des N derniers mois avant referenceDate (comportement historique, hors saison). */
+export function buildRecentMonthBuckets(monthsCount = 6, referenceDate = new Date()) {
+  const buckets: { key: string; month: string }[] = []
+  for (let i = monthsCount - 1; i >= 0; i--) {
+    const d = new Date(referenceDate.getFullYear(), referenceDate.getMonth() - i, 1)
+    buckets.push({ key: `${d.getFullYear()}-${d.getMonth()}`, month: MONTH_FORMATTER.format(d) })
+  }
+  return buckets
+}
+
+/** Mois calendaires couverts par une saison (de son début à sa fin, ou à aujourd'hui si elle est en cours). */
+export function buildSeasonMonthBuckets(season: { startDate: string; endDate: string }) {
+  const start = new Date(season.startDate)
+  const today = new Date()
+  const end = new Date(Math.min(new Date(season.endDate).getTime(), today.getTime()))
+  const buckets: { key: string; month: string }[] = []
+  const cursor = new Date(start.getFullYear(), start.getMonth(), 1)
+  const last = new Date(end.getFullYear(), end.getMonth(), 1)
+  while (cursor <= last) {
+    buckets.push({ key: `${cursor.getFullYear()}-${cursor.getMonth()}`, month: MONTH_FORMATTER.format(cursor) })
+    cursor.setMonth(cursor.getMonth() + 1)
+  }
+  return buckets.length > 0 ? buckets : buildRecentMonthBuckets(1)
+}
+
+/** Tableau croisé catégorie × mois pour un sens donné (entrée/sortie), sur les mois fournis. */
 export function computeCategoryPivot(
   transactions: Transaction[],
   type: TransactionType,
-  monthsCount = 6,
+  monthBuckets: { key: string; month: string }[],
 ) {
-  const now = new Date()
-  const monthDates: Date[] = []
-  for (let i = monthsCount - 1; i >= 0; i--) {
-    monthDates.push(new Date(now.getFullYear(), now.getMonth() - i, 1))
-  }
-  const months = monthDates.map((d) => MONTH_FORMATTER.format(d))
-  const monthKeys = monthDates.map((d) => `${d.getFullYear()}-${d.getMonth()}`)
+  const monthsCount = monthBuckets.length
+  const months = monthBuckets.map((b) => b.month)
+  const monthKeys = monthBuckets.map((b) => b.key)
 
   function monthIndex(date: string) {
     const d = new Date(date)

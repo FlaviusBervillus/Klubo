@@ -6,11 +6,11 @@ import { TriangleAlertIcon, ArrowRightIcon } from "lucide-react"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { useTranslation } from "@/lib/i18n/context"
-import { useTransactionsStore } from "@/lib/transactions-store"
+import { useSeasonTransactions } from "@/lib/seasons-store"
 
 export function AlertBanner() {
   const { t } = useTranslation()
-  const { transactions } = useTransactionsStore()
+  const transactions = useSeasonTransactions()
   const toCategorizeCount = transactions.filter((tx) => tx.status === "a_categoriser").length
 
   if (toCategorizeCount === 0) return null

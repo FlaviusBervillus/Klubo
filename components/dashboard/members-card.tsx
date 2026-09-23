@@ -9,7 +9,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
-import { useClientsStore } from "@/lib/clients-store"
+import { useSeasonClients } from "@/lib/seasons-store"
 import { useTranslation } from "@/lib/i18n/context"
 import { ALL_COURSE_TYPES, type CourseType } from "@/lib/mock-data"
 
@@ -25,7 +25,7 @@ const dotColors: Record<CourseType, string> = {
 
 export function MembersCard() {
   const { t } = useTranslation()
-  const { clients } = useClientsStore()
+  const { clients } = useSeasonClients()
 
   const counts = ALL_COURSE_TYPES
     .map((status) => ({

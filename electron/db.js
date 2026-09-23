@@ -92,9 +92,28 @@ function migrate(db) {
       cursor TEXT,
       last_synced_at TEXT
     );
+
+    CREATE TABLE IF NOT EXISTS seasons (
+      id TEXT PRIMARY KEY,
+      label TEXT NOT NULL,
+      start_date TEXT NOT NULL,
+      end_date TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS client_seasons (
+      client_id TEXT NOT NULL,
+      season_id TEXT NOT NULL,
+      status TEXT NOT NULL,
+      paid INTEGER NOT NULL DEFAULT 0,
+      PRIMARY KEY (client_id, season_id)
+    );
   `)
 
   ensureColumn(db, "clients", "address", "address TEXT NOT NULL DEFAULT ''")
+  // Facture réellement générée par Stripe (Stripe Invoicing) pour cette charge, quand elle existe :
+  // on préfère toujours la vraie facture Stripe à celle que l'on génère nous-mêmes.
+  ensureColumn(db, "transactions", "stripe_invoice_pdf_url", "stripe_invoice_pdf_url TEXT")
 }
 
 /** Ajoute une colonne à une table existante si elle n'y est pas déjà (les CREATE TABLE IF NOT EXISTS ci-dessus ne touchent pas les tables déjà créées lors d'une version antérieure). */
@@ -380,6 +399,7 @@ function updateTransaction(id, patch) {
     ["method", "method"],
     ["member", "member"],
     ["stripeNet", "stripe_net"],
+    ["stripeInvoicePdfUrl", "stripe_invoice_pdf_url"],
   ]) {
     if (patch[key] !== undefined) {
       fields.push(`${column} = @${key}`)
@@ -453,6 +473,56 @@ function setSyncState(provider, cursor) {
     .run(provider, cursor)
 }
 
+/* ---------- Saisons ---------- */
+function getSeasons() {
+  return getDb().prepare("SELECT * FROM seasons ORDER BY start_date DESC").all()
+}
+
+function createSeason({ id, label, startDate, endDate }) {
+  getDb()
+    .prepare("INSERT INTO seasons (id, label, start_date, end_date) VALUES (@id, @label, @startDate, @endDate)")
+    .run({ id, label, startDate, endDate })
+}
+
+function updateSeason(id, patch) {
+  const fields = []
+  const params = { id }
+  for (const [key, column] of [
+    ["label", "label"],
+    ["startDate", "start_date"],
+    ["endDate", "end_date"],
+  ]) {
+    if (patch[key] !== undefined) {
+      fields.push(`${column} = @${key}`)
+      params[key] = patch[key]
+    }
+  }
+  if (fields.length === 0) return
+  getDb().prepare(`UPDATE seasons SET ${fields.join(", ")} WHERE id = @id`).run(params)
+}
+
+function deleteSeason(id) {
+  getDb().prepare("DELETE FROM seasons WHERE id = ?").run(id)
+  getDb().prepare("DELETE FROM client_seasons WHERE season_id = ?").run(id)
+}
+
+/** Statut ("cours") + paiement d'un client pour une saison donnée, uniquement pour celles où ils ont été modifiés explicitement. */
+function getClientSeasonMap(seasonId) {
+  const rows = getDb()
+    .prepare("SELECT client_id, status, paid FROM client_seasons WHERE season_id = ?")
+    .all(seasonId)
+  return Object.fromEntries(rows.map((r) => [r.client_id, { status: r.status, paid: !!r.paid }]))
+}
+
+function setClientSeason(clientId, seasonId, { status, paid }) {
+  getDb()
+    .prepare(
+      `INSERT INTO client_seasons (client_id, season_id, status, paid) VALUES (@clientId, @seasonId, @status, @paid)
+       ON CONFLICT(client_id, season_id) DO UPDATE SET status = excluded.status, paid = excluded.paid`,
+    )
+    .run({ clientId, seasonId, status, paid: paid ? 1 : 0 })
+}
+
 function getDbFilePath() {
   return path.join(app.getPath("userData"), "compta.sqlite3")
 }
@@ -496,4 +566,10 @@ module.exports = {
   setVault,
   getSyncState,
   setSyncState,
+  getSeasons,
+  createSeason,
+  updateSeason,
+  deleteSeason,
+  getClientSeasonMap,
+  setClientSeason,
 }

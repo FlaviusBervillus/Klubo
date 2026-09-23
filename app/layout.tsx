@@ -9,6 +9,7 @@ import { AuthProvider } from "@/lib/auth-context"
 import { ClientsProvider } from "@/lib/clients-store"
 import { ClubSettingsProvider } from "@/lib/club-settings"
 import { LocaleProvider } from "@/lib/i18n/context"
+import { SeasonsProvider } from "@/lib/seasons-store"
 import { SecureVaultProvider } from "@/lib/secure-vault"
 import { TransactionsProvider } from "@/lib/transactions-store"
 import "./globals.css"
@@ -57,17 +58,19 @@ export default function RootLayout({
           <LocaleProvider>
             <ClubSettingsProvider>
               <SecureVaultProvider>
-                <TransactionsProvider>
-                  <ClientsProvider>
-                    <AuthProvider>
-                      <AuthGate>
-                        <AppShell>{children}</AppShell>
-                        <VaultUnlockPrompt />
-                      </AuthGate>
-                      <Toaster position="top-right" />
-                    </AuthProvider>
-                  </ClientsProvider>
-                </TransactionsProvider>
+                <SeasonsProvider>
+                  <TransactionsProvider>
+                    <ClientsProvider>
+                      <AuthProvider>
+                        <AuthGate>
+                          <AppShell>{children}</AppShell>
+                          <VaultUnlockPrompt />
+                        </AuthGate>
+                        <Toaster position="top-right" />
+                      </AuthProvider>
+                    </ClientsProvider>
+                  </TransactionsProvider>
+                </SeasonsProvider>
               </SecureVaultProvider>
             </ClubSettingsProvider>
           </LocaleProvider>

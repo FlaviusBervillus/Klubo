@@ -29,7 +29,7 @@ import {
 import { Empty } from "@/components/ui/empty"
 import { MethodBadge } from "@/components/finance-badges"
 import { AddClientDialog } from "@/components/clients/add-client-dialog"
-import { useClientsStore } from "@/lib/clients-store"
+import { useSeasonClients } from "@/lib/seasons-store"
 import { useTranslation } from "@/lib/i18n/context"
 import { ALL_COURSE_TYPES, type CourseType } from "@/lib/mock-data"
 
@@ -50,7 +50,7 @@ const statusStyles: Record<CourseType, string> = {
 
 export function ClientsTable() {
   const { t } = useTranslation()
-  const { clients } = useClientsStore()
+  const { clients } = useSeasonClients()
   const [query, setQuery] = useState("")
   const [status, setStatus] = useState("all")
   const [paymentStatus, setPaymentStatus] = useState("all")

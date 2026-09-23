@@ -48,13 +48,16 @@ import { MethodBadge, StatusBadge, Amount } from "@/components/finance-badges"
 import { ReceiptPreviewDialog } from "@/components/transactions/receipt-preview-dialog"
 import { useTranslation } from "@/lib/i18n/context"
 import { ASSIGNABLE_CATEGORIES, formatDate, formatEuro, type Category } from "@/lib/mock-data"
+import { downloadReceiptOrOpenPreview } from "@/lib/receipt-actions"
+import { useSeasonTransactions } from "@/lib/seasons-store"
 import { useTransactionsStore } from "@/lib/transactions-store"
 
 export function TransactionsTable() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const { t } = useTranslation()
-  const { transactions: rows, categorize: categorizeInStore } = useTransactionsStore()
+  const rows = useSeasonTransactions()
+  const { categorize: categorizeInStore } = useTransactionsStore()
   const [query, setQuery] = useState("")
   const [category, setCategory] = useState("all")
   const [method, setMethod] = useState("all")
@@ -128,11 +131,7 @@ export function TransactionsTable() {
   }
 
   function openReceiptPreview(id: string) {
-    if (typeof window === "undefined" || !window.electronAPI) {
-      toast.error(t.settings.electronOnlyFeature)
-      return
-    }
-    setPreviewTxId(id)
+    downloadReceiptOrOpenPreview(id, t, () => setPreviewTxId(id))
   }
 
   const hasFilters =

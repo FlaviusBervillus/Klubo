@@ -154,6 +154,7 @@ export interface Dictionary {
     grossAmount: string
     stripeFee: string
     netAmount: string
+    refundedAmount: string
     rawPayload: string
   }
   reports: {
@@ -191,6 +192,12 @@ export interface Dictionary {
     fieldRna: string
     changeLogo: string
     removeLogo: string
+    fieldStamp: string
+    changeStamp: string
+    removeStamp: string
+    fieldSignature: string
+    changeSignature: string
+    removeSignature: string
     identitySaved: string
     stripeTitle: string
     stripeSubtitle: string
@@ -330,5 +337,16 @@ export interface Dictionary {
     cannotDeleteSelf: string
     userCreated: string
     tempPasswordLabel: string
+  }
+  seasons: {
+    none: string
+    new: string
+    newTitle: string
+    newSubtitle: string
+    label: string
+    start: string
+    end: string
+    created: string
+    allTime: string
   }
 }

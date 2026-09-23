@@ -14,6 +14,7 @@ import {
 } from "lucide-react"
 
 import { AccountDialog } from "@/components/account/account-dialog"
+import { SeasonSwitcher } from "@/components/season-switcher"
 import { Button } from "@/components/ui/button"
 import {
   Sidebar,
@@ -31,7 +32,7 @@ import { useAuth } from "@/lib/auth-context"
 import { useClubSettings } from "@/lib/club-settings"
 import { useTranslation } from "@/lib/i18n/context"
 import { normalizePathname } from "@/lib/utils"
-import { useTransactionsStore } from "@/lib/transactions-store"
+import { useSeasonTransactions } from "@/lib/seasons-store"
 
 const SETTINGS_ROLES = ["admin", "tresorier", "president"]
 
@@ -40,7 +41,7 @@ export function AppSidebar() {
   const { session, logout } = useAuth()
   const { t } = useTranslation()
   const { settings } = useClubSettings()
-  const { transactions } = useTransactionsStore()
+  const transactions = useSeasonTransactions()
   const toCategorizeCount = transactions.filter((t) => t.status === "a_categoriser").length
 
   const nav = [
@@ -79,11 +80,9 @@ export function AppSidebar() {
           </div>
           <div className="flex flex-col leading-tight">
             <span className="text-sm font-semibold">{settings.name}</span>
-            <span className="text-xs text-sidebar-foreground/60">
-              {settings.season}
-            </span>
           </div>
         </div>
+        <SeasonSwitcher />
       </SidebarHeader>
 
       <SidebarContent>

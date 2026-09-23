@@ -46,6 +46,10 @@ async function backup(email, password) {
     const excelFileName = `compta_${timestamp}.xlsx`
     await uploadBuffer(folder, excelFileName, excelData)
 
+    // Sert à vérifier, avant une synchro Stripe, qu'une sauvegarde a bien eu lieu après
+    // la fin de la saison en cours (voir requireBackupBeforeStripeSync dans main.js).
+    db.setSyncState("mega", null)
+
     return { fileName: dbFileName, size: dbData.length }
   } finally {
     await storage.close()

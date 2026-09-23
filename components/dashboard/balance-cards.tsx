@@ -19,7 +19,7 @@ import {
 import { computeAccountBalance } from "@/lib/dashboard-stats"
 import { useTranslation } from "@/lib/i18n/context"
 import { formatEuro } from "@/lib/mock-data"
-import { useTransactionsStore } from "@/lib/transactions-store"
+import { useSeasonTransactions } from "@/lib/seasons-store"
 
 function api() {
   return typeof window !== "undefined" ? window.electronAPI : undefined
@@ -27,7 +27,7 @@ function api() {
 
 export function BalanceCards() {
   const { t } = useTranslation()
-  const { transactions } = useTransactionsStore()
+  const transactions = useSeasonTransactions()
   const [available, setAvailable] = useState(false)
   const [bankBalance, setBankBalance] = useState<number | null>(null)
 
