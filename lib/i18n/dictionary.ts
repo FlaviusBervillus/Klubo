@@ -118,9 +118,12 @@ export interface Dictionary {
     filteredIn: string
     filteredOut: string
     filteredNet: string
+    filteredFees: string
     viewDetail: string
     downloadReceipt: string
     classify: string
+    changeCategory: string
+    categoryChanged: string
     noResults: string
     resultsCount: string
     addTransaction: string

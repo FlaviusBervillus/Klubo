@@ -15,6 +15,7 @@ import {
   DownloadIcon,
   CreditCardIcon,
 } from "lucide-react"
+import { toast } from "sonner"
 
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -41,11 +42,25 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { MethodBadge, StatusBadge, Amount } from "@/components/finance-badges"
 import { ReceiptPreviewDialog } from "@/components/transactions/receipt-preview-dialog"
 import { useClubSettings } from "@/lib/club-settings"
 import { useTranslation } from "@/lib/i18n/context"
-import { formatDate, formatEuro, type Transaction } from "@/lib/mock-data"
+import {
+  ASSIGNABLE_CATEGORIES,
+  formatDate,
+  formatEuro,
+  type Category,
+  type Transaction,
+} from "@/lib/mock-data"
 import { downloadReceiptOrOpenPreview } from "@/lib/receipt-actions"
 import { useTransactionsStore } from "@/lib/transactions-store"
 
@@ -53,7 +68,7 @@ export function TransactionDetailView() {
   const { t } = useTranslation()
   const searchParams = useSearchParams()
   const id = searchParams.get("id") ?? ""
-  const { getTransaction, loaded } = useTransactionsStore()
+  const { getTransaction, loaded, categorize: categorizeInStore } = useTransactionsStore()
   const tx = getTransaction(id)
   const [previewOpen, setPreviewOpen] = useState(false)
 
@@ -80,6 +95,18 @@ export function TransactionDetailView() {
   function openReceiptPreview() {
     downloadReceiptOrOpenPreview(txId, t, () => setPreviewOpen(true))
   }
+
+  function changeCategory(targetCategory: Category) {
+    categorizeInStore(txId, targetCategory)
+    toast.success(t.transactions.categoryChanged, {
+      description: t.categories[targetCategory],
+    })
+  }
+
+  const categoryItems = ASSIGNABLE_CATEGORIES.map((c) => ({
+    value: c,
+    label: t.categories[c],
+  }))
 
   return (
     <div className="mx-auto flex w-full max-w-4xl flex-col gap-6">
@@ -148,7 +175,24 @@ export function TransactionDetailView() {
                   {t.statuses.a_categoriser}
                 </Badge>
               ) : (
-                t.categories[tx.category]
+                <Select
+                  items={categoryItems}
+                  value={tx.category}
+                  onValueChange={(v) => changeCategory(v as Category)}
+                >
+                  <SelectTrigger size="sm" className="h-7 border-transparent bg-transparent pr-1.5 pl-2 font-medium hover:border-input">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      {categoryItems.map((c) => (
+                        <SelectItem key={c.value} value={c.value}>
+                          {c.label}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
               )}
             </MetaRow>
             <Separator />

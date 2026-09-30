@@ -41,6 +41,9 @@ import {
   DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Empty } from "@/components/ui/empty"
@@ -114,19 +117,28 @@ export function TransactionsTable() {
   const summary = useMemo(() => {
     let entrees = 0
     let sorties = 0
+    let fees = 0
     for (const tx of filtered) {
       if (tx.status === "echec") continue
       const value = tx.stripe ? tx.stripe.net : tx.amount
       if (tx.type === "entree") entrees += value
       else sorties += value
+      if (tx.stripe) fees += tx.stripe.fee
     }
-    return { entrees, sorties, net: entrees - sorties }
+    return { entrees, sorties, net: entrees - sorties, fees }
   }, [filtered])
 
   function categorize(id: string, targetCategory: Category) {
     categorizeInStore(id, targetCategory)
     toast.success("Transaction catégorisée", {
       description: `Classée dans « ${t.categories[targetCategory]} » et validée.`,
+    })
+  }
+
+  function changeCategory(id: string, targetCategory: Category) {
+    categorizeInStore(id, targetCategory)
+    toast.success(t.transactions.categoryChanged, {
+      description: t.categories[targetCategory],
     })
   }
 
@@ -232,7 +244,7 @@ export function TransactionsTable() {
         </div>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Card>
           <CardHeader>
             <CardDescription>{t.transactions.filteredIn}</CardDescription>
@@ -254,6 +266,14 @@ export function TransactionsTable() {
             <CardDescription>{t.transactions.filteredNet}</CardDescription>
             <CardTitle className="font-mono text-2xl tabular-nums">
               {formatEuro(summary.net, { signed: true })}
+            </CardTitle>
+          </CardHeader>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardDescription>{t.transactions.filteredFees}</CardDescription>
+            <CardTitle className="font-mono text-2xl tabular-nums text-[oklch(0.5_0.15_265)] dark:text-[oklch(0.75_0.12_265)]">
+              − {formatEuro(summary.fees)}
             </CardTitle>
           </CardHeader>
         </Card>
@@ -375,6 +395,22 @@ export function TransactionsTable() {
                           <DropdownMenuItem onClick={() => openReceiptPreview(tx.id)}>
                             {t.transactions.downloadReceipt}
                           </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuSub>
+                            <DropdownMenuSubTrigger>
+                              {t.transactions.changeCategory}
+                            </DropdownMenuSubTrigger>
+                            <DropdownMenuSubContent>
+                              {ASSIGNABLE_CATEGORIES.map((c) => (
+                                <DropdownMenuItem
+                                  key={c}
+                                  onClick={() => changeCategory(tx.id, c)}
+                                >
+                                  {t.categories[c]}
+                                </DropdownMenuItem>
+                              ))}
+                            </DropdownMenuSubContent>
+                          </DropdownMenuSub>
                         </DropdownMenuGroup>
                       </DropdownMenuContent>
                     </DropdownMenu>
