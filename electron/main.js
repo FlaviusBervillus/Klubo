@@ -10,6 +10,7 @@ const stripeSync = require("./stripe-sync")
 const gocardlessSync = require("./gocardless-sync")
 const megaSync = require("./mega-sync")
 const { generateReceiptPdf, renderInvoiceHtml } = require("./invoice-pdf")
+const { importClientsFromExcel } = require("./excel-import")
 const { setupAutoUpdater } = require("./updater")
 
 const PROTOCOL = "klubo"
@@ -96,6 +97,21 @@ ipcMain.handle("db:createClient", (_e, client) => {
 })
 ipcMain.handle("db:updateClient", (_e, id, patch) => db.updateClient(id, patch))
 ipcMain.handle("db:deleteClient", (_e, id) => db.deleteClient(id))
+
+ipcMain.handle("clients:import-excel", async () => {
+  try {
+    const { canceled, filePaths } = await dialog.showOpenDialog(mainWindow, {
+      title: "Importer un fichier Excel de clients",
+      filters: [{ name: "Excel", extensions: ["xlsx", "xls"] }],
+      properties: ["openFile"],
+    })
+    if (canceled || !filePaths[0]) return { ok: false, canceled: true }
+    const result = await importClientsFromExcel(filePaths[0])
+    return { ok: true, ...result }
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) }
+  }
+})
 
 ipcMain.handle("db:getTransactions", () => db.getTransactions())
 ipcMain.handle("db:createTransaction", (_e, tx) => {

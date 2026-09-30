@@ -26,6 +26,10 @@ export interface DbClient {
   status: string
   method: string
   paid: number
+  phone: string
+  birth_date: string | null
+  postal_code: string
+  city: string
 }
 
 export interface DbTransaction {
@@ -86,6 +90,10 @@ declare global {
         createClient: (client: Record<string, unknown>) => Promise<void>
         updateClient: (id: string, patch: Record<string, unknown>) => Promise<void>
         deleteClient: (id: string) => Promise<void>
+        importClientsExcel: () => Promise<
+          | { ok: true; created: number; updated: number; skipped: number }
+          | { ok: false; error?: string; canceled?: boolean }
+        >
 
         getTransactions: () => Promise<DbTransaction[]>
         createTransaction: (tx: Record<string, unknown>) => Promise<void>

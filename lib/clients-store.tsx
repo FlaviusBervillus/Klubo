@@ -19,6 +19,10 @@ function rowToClient(row: DbClient): Client {
     status: row.status as CourseType,
     method: row.method as PaymentMethod,
     paid: !!row.paid,
+    phone: row.phone ?? "",
+    birthDate: row.birth_date ?? null,
+    postalCode: row.postal_code ?? "",
+    city: row.city ?? "",
   }
 }
 
@@ -31,6 +35,10 @@ export interface NewClient {
   status: CourseType
   method: PaymentMethod
   paid: boolean
+  phone: string
+  birthDate: string | null
+  postalCode: string
+  city: string
 }
 
 const ClientsContext = createContext<{
@@ -39,6 +47,10 @@ const ClientsContext = createContext<{
   available: boolean
   addClient: (input: NewClient) => Promise<void>
   updateClient: (id: string, patch: Partial<NewClient>) => Promise<void>
+  importClientsExcel: () => Promise<
+    | { ok: true; created: number; updated: number; skipped: number }
+    | { ok: false; error?: string; canceled?: boolean }
+  >
   refresh: () => Promise<void>
 } | null>(null)
 
@@ -76,8 +88,18 @@ export function ClientsProvider({ children }: { children: React.ReactNode }) {
     await refresh()
   }
 
+  async function importClientsExcel() {
+    const electronApi = api()
+    if (!electronApi) return { ok: false as const, error: undefined }
+    const result = await electronApi.db.importClientsExcel()
+    if (result.ok) await refresh()
+    return result
+  }
+
   return (
-    <ClientsContext.Provider value={{ clients, loaded, available, addClient, updateClient, refresh }}>
+    <ClientsContext.Provider
+      value={{ clients, loaded, available, addClient, updateClient, importClientsExcel, refresh }}
+    >
       {children}
     </ClientsContext.Provider>
   )

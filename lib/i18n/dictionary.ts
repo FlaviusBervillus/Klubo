@@ -344,11 +344,20 @@ export interface Dictionary {
     colStatus: string
     colPayment: string
     colPaymentStatus: string
+    colPhone: string
+    colBirthDate: string
+    colPostalCode: string
+    colCity: string
     paid: string
     unpaid: string
     allPaymentStatuses: string
     noResults: string
     resultsCount: string
+    importExcel: string
+    importing: string
+    importSuccessTitle: string
+    importSuccessDescription: string
+    importErrorTitle: string
   }
   account: {
     trigger: string

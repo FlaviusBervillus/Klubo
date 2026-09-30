@@ -45,6 +45,10 @@ const emptyForm = {
   status: "Kung-fu Adulte" as CourseType,
   method: "especes" as PaymentMethod,
   paid: true,
+  phone: "",
+  birthDate: "",
+  postalCode: "",
+  city: "",
 }
 
 function formFromClient(client: Client) {
@@ -56,6 +60,10 @@ function formFromClient(client: Client) {
     status: client.status,
     method: client.method,
     paid: client.paid,
+    phone: client.phone,
+    birthDate: client.birthDate ?? "",
+    postalCode: client.postalCode,
+    city: client.city,
   }
 }
 
@@ -169,6 +177,48 @@ export function AddClientDialog({ client }: { client?: Client } = {}) {
                 placeholder="10c Rue de la Barre Andrée, 44470 Thouaré-sur-Loire"
               />
             </Field>
+
+            <div className="grid grid-cols-2 gap-4">
+              <Field>
+                <FieldLabel htmlFor="client-postal-code">{t.clients.colPostalCode}</FieldLabel>
+                <Input
+                  id="client-postal-code"
+                  value={form.postalCode}
+                  onChange={(e) => setForm((f) => ({ ...f, postalCode: e.target.value }))}
+                  placeholder="44470"
+                />
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="client-city">{t.clients.colCity}</FieldLabel>
+                <Input
+                  id="client-city"
+                  value={form.city}
+                  onChange={(e) => setForm((f) => ({ ...f, city: e.target.value }))}
+                  placeholder="Carquefou"
+                />
+              </Field>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <Field>
+                <FieldLabel htmlFor="client-phone">{t.clients.colPhone}</FieldLabel>
+                <Input
+                  id="client-phone"
+                  value={form.phone}
+                  onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))}
+                  placeholder="+33 6 79 81 95 05"
+                />
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="client-birth-date">{t.clients.colBirthDate}</FieldLabel>
+                <Input
+                  id="client-birth-date"
+                  type="date"
+                  value={form.birthDate}
+                  onChange={(e) => setForm((f) => ({ ...f, birthDate: e.target.value }))}
+                />
+              </Field>
+            </div>
 
             <div className="grid grid-cols-2 gap-4">
               <Field>

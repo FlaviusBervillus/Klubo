@@ -111,6 +111,10 @@ function migrate(db) {
   `)
 
   ensureColumn(db, "clients", "address", "address TEXT NOT NULL DEFAULT ''")
+  ensureColumn(db, "clients", "phone", "phone TEXT NOT NULL DEFAULT ''")
+  ensureColumn(db, "clients", "birth_date", "birth_date TEXT")
+  ensureColumn(db, "clients", "postal_code", "postal_code TEXT NOT NULL DEFAULT ''")
+  ensureColumn(db, "clients", "city", "city TEXT NOT NULL DEFAULT ''")
   // Facture réellement générée par Stripe (Stripe Invoicing) pour cette charge, quand elle existe :
   // on préfère toujours la vraie facture Stripe à celle que l'on génère nous-mêmes.
   ensureColumn(db, "transactions", "stripe_invoice_pdf_url", "stripe_invoice_pdf_url TEXT")
@@ -194,14 +198,18 @@ function getClients() {
 function createClient(client) {
   getDb()
     .prepare(
-      `INSERT INTO clients (id, stripe_customer_id, first_name, last_name, email, status, method, paid, address)
-       VALUES (@id, @stripeCustomerId, @firstName, @lastName, @email, @status, @method, @paid, @address)`,
+      `INSERT INTO clients (id, stripe_customer_id, first_name, last_name, email, status, method, paid, address, phone, birth_date, postal_code, city)
+       VALUES (@id, @stripeCustomerId, @firstName, @lastName, @email, @status, @method, @paid, @address, @phone, @birthDate, @postalCode, @city)`,
     )
     .run({
       ...client,
       stripeCustomerId: client.stripeCustomerId ?? null,
       paid: client.paid ? 1 : 0,
       address: client.address ?? "",
+      phone: client.phone ?? "",
+      birthDate: client.birthDate ?? null,
+      postalCode: client.postalCode ?? "",
+      city: client.city ?? "",
     })
 }
 
@@ -237,6 +245,21 @@ function findGuestClient({ email, firstName, lastName }) {
     .prepare(
       `SELECT id, status FROM clients
        WHERE stripe_customer_id IS NULL AND (email IS NULL OR email = '') AND first_name = @firstName AND last_name = @lastName`,
+    )
+    .get({ firstName, lastName })
+}
+
+/** Retrouve un client existant pour l'import Excel : par email (insensible à la casse) en priorité, sinon par prénom+nom exacts (insensible à la casse). */
+function findClientForImport({ email, firstName, lastName }) {
+  if (email) {
+    const match = getDb()
+      .prepare("SELECT * FROM clients WHERE email <> '' AND lower(email) = lower(@email)")
+      .get({ email })
+    if (match) return match
+  }
+  return getDb()
+    .prepare(
+      `SELECT * FROM clients WHERE lower(first_name) = lower(@firstName) AND lower(last_name) = lower(@lastName)`,
     )
     .get({ firstName, lastName })
 }
@@ -321,6 +344,10 @@ function updateClient(id, patch) {
     ["method", "method"],
     ["paid", "paid"],
     ["address", "address"],
+    ["phone", "phone"],
+    ["birthDate", "birth_date"],
+    ["postalCode", "postal_code"],
+    ["city", "city"],
   ]) {
     if (patch[key] !== undefined) {
       fields.push(`${column} = @${key}`)
@@ -549,6 +576,7 @@ module.exports = {
   upsertClientByStripeId,
   upsertGuestClient,
   applyDetectedCourseType,
+  findClientForImport,
   findClientForTransaction,
   updateClient,
   deleteClient,

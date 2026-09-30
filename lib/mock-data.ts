@@ -95,6 +95,10 @@ export interface Client {
   status: CourseType
   method: PaymentMethod
   paid: boolean
+  phone: string
+  birthDate: string | null
+  postalCode: string
+  city: string
 }
 
 /* ---------- Helpers ---------- */

@@ -2,6 +2,7 @@
 
 import { AddClientDialog } from "@/components/clients/add-client-dialog"
 import { ClientsTable } from "@/components/clients/clients-table"
+import { ImportClientsExcelButton } from "@/components/clients/import-clients-excel-button"
 import { useTranslation } from "@/lib/i18n/context"
 
 export default function ClientsPage() {
@@ -16,7 +17,10 @@ export default function ClientsPage() {
           </h2>
           <p className="text-sm text-muted-foreground">{t.clients.subtitle}</p>
         </div>
-        <AddClientDialog />
+        <div className="flex flex-wrap gap-2">
+          <ImportClientsExcelButton />
+          <AddClientDialog />
+        </div>
       </div>
 
       <ClientsTable />

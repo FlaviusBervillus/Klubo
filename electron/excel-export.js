@@ -52,7 +52,11 @@ async function generateExcelBuffer() {
     { header: "Prénom", key: "firstName", width: 20 },
     { header: "Nom", key: "lastName", width: 20 },
     { header: "Email", key: "email", width: 30 },
+    { header: "Téléphone", key: "phone", width: 16 },
+    { header: "Date de naissance", key: "birthDate", width: 16 },
     { header: "Adresse", key: "address", width: 40 },
+    { header: "Code postal", key: "postalCode", width: 12 },
+    { header: "Ville", key: "city", width: 20 },
     { header: "Cours", key: "status", width: 20 },
     { header: "Méthode", key: "method", width: 12 },
     { header: "Payé", key: "paid", width: 10 },
@@ -62,14 +66,18 @@ async function generateExcelBuffer() {
       firstName: c.first_name,
       lastName: c.last_name,
       email: c.email,
+      phone: c.phone || "",
+      birthDate: c.birth_date || "",
       address: c.address,
+      postalCode: c.postal_code || "",
+      city: c.city || "",
       status: c.status,
       method: METHOD_LABELS[c.method] || c.method,
       paid: c.paid ? "Oui" : "Non",
     })
   }
   clientSheet.getRow(1).font = { bold: true }
-  clientSheet.autoFilter = { from: "A1", to: "G1" }
+  clientSheet.autoFilter = { from: "A1", to: "K1" }
 
   return workbook.xlsx.writeBuffer()
 }

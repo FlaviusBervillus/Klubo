@@ -19,6 +19,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
     createClient: (client) => ipcRenderer.invoke("db:createClient", client),
     updateClient: (id, patch) => ipcRenderer.invoke("db:updateClient", id, patch),
     deleteClient: (id) => ipcRenderer.invoke("db:deleteClient", id),
+    importClientsExcel: () => ipcRenderer.invoke("clients:import-excel"),
 
     getTransactions: () => ipcRenderer.invoke("db:getTransactions"),
     createTransaction: (tx) => ipcRenderer.invoke("db:createTransaction", tx),

@@ -13,6 +13,8 @@ import {
   LogOutIcon,
 } from "lucide-react"
 
+import packageJson from "@/package.json"
+
 import { AccountDialog } from "@/components/account/account-dialog"
 import { SeasonSwitcher } from "@/components/season-switcher"
 import { Button } from "@/components/ui/button"
@@ -145,6 +147,9 @@ export function AppSidebar() {
             </Button>
           </div>
         ) : null}
+        <span className="px-2 pt-1 text-[11px] text-sidebar-foreground/40">
+          {packageJson.name} v{packageJson.version}
+        </span>
       </SidebarFooter>
     </Sidebar>
   )
