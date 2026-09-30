@@ -3,7 +3,7 @@
 import { createContext, useContext, useEffect, useState } from "react"
 
 import type { Client, CourseType, PaymentMethod } from "@/lib/mock-data"
-import type { DbClient } from "@/types/electron"
+import type { DbClient, ImportBatch, ImportDecision, ImportPlanItem } from "@/types/electron"
 
 function api() {
   return typeof window !== "undefined" ? window.electronAPI : undefined
@@ -23,6 +23,7 @@ function rowToClient(row: DbClient): Client {
     birthDate: row.birth_date ?? null,
     postalCode: row.postal_code ?? "",
     city: row.city ?? "",
+    guardianId: row.guardian_id ?? null,
   }
 }
 
@@ -39,6 +40,7 @@ export interface NewClient {
   birthDate: string | null
   postalCode: string
   city: string
+  guardianId: string | null
 }
 
 const ClientsContext = createContext<{
@@ -47,10 +49,18 @@ const ClientsContext = createContext<{
   available: boolean
   addClient: (input: NewClient) => Promise<void>
   updateClient: (id: string, patch: Partial<NewClient>) => Promise<void>
-  importClientsExcel: () => Promise<
-    | { ok: true; created: number; updated: number; skipped: number }
-    | { ok: false; error?: string; canceled?: boolean }
+  analyzeExcelImport: () => Promise<
+    { ok: true; items: ImportPlanItem[] } | { ok: false; error?: string; canceled?: boolean }
   >
+  applyExcelImport: (
+    items: ImportPlanItem[],
+    decisions: Record<number, ImportDecision>,
+  ) => Promise<
+    | { ok: true; batchId: string; created: number; updated: number; skipped: number; linked: number }
+    | { ok: false; error?: string }
+  >
+  undoImportBatch: (batchId: string) => Promise<{ ok: true } | { ok: false; error?: string }>
+  listImportBatches: () => Promise<ImportBatch[]>
   refresh: () => Promise<void>
 } | null>(null)
 
@@ -88,17 +98,48 @@ export function ClientsProvider({ children }: { children: React.ReactNode }) {
     await refresh()
   }
 
-  async function importClientsExcel() {
+  async function analyzeExcelImport() {
     const electronApi = api()
     if (!electronApi) return { ok: false as const, error: undefined }
-    const result = await electronApi.db.importClientsExcel()
+    return electronApi.db.analyzeExcelImport()
+  }
+
+  async function applyExcelImport(items: ImportPlanItem[], decisions: Record<number, ImportDecision>) {
+    const electronApi = api()
+    if (!electronApi) return { ok: false as const, error: undefined }
+    const result = await electronApi.db.applyExcelImport(items, decisions)
     if (result.ok) await refresh()
     return result
   }
 
+  async function undoImportBatch(batchId: string) {
+    const electronApi = api()
+    if (!electronApi) return { ok: false as const, error: undefined }
+    const result = await electronApi.db.undoImportBatch(batchId)
+    if (result.ok) await refresh()
+    return result
+  }
+
+  async function listImportBatches() {
+    const electronApi = api()
+    if (!electronApi) return []
+    return electronApi.db.listImportBatches()
+  }
+
   return (
     <ClientsContext.Provider
-      value={{ clients, loaded, available, addClient, updateClient, importClientsExcel, refresh }}
+      value={{
+        clients,
+        loaded,
+        available,
+        addClient,
+        updateClient,
+        analyzeExcelImport,
+        applyExcelImport,
+        undoImportBatch,
+        listImportBatches,
+        refresh,
+      }}
     >
       {children}
     </ClientsContext.Provider>

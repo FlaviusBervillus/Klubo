@@ -358,6 +358,29 @@ export interface Dictionary {
     importSuccessTitle: string
     importSuccessDescription: string
     importErrorTitle: string
+    importChooseFile: string
+    importNoRows: string
+    importReviewTitle: string
+    importReviewDescription: string
+    importActionHeader: string
+    importActionNew: string
+    importActionComplete: string
+    importActionNothing: string
+    importGuardianNone: string
+    importGuardianLabel: string
+    importGuardianLinkTo: string
+    importConfirmButton: string
+    importApplying: string
+    importDoneTitle: string
+    importUndoBatch: string
+    importUndoSuccess: string
+    importUndoError: string
+    importRecentTitle: string
+    importRecentEmpty: string
+    importRecentUndone: string
+    importBatchSummary: string
+    guardianFieldLabel: string
+    guardianFieldNone: string
   }
   account: {
     trigger: string

@@ -108,6 +108,23 @@ function migrate(db) {
       paid INTEGER NOT NULL DEFAULT 0,
       PRIMARY KEY (client_id, season_id)
     );
+
+    CREATE TABLE IF NOT EXISTS import_batches (
+      id TEXT PRIMARY KEY,
+      created_count INTEGER NOT NULL DEFAULT 0,
+      updated_count INTEGER NOT NULL DEFAULT 0,
+      skipped_count INTEGER NOT NULL DEFAULT 0,
+      undone INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS import_batch_changes (
+      id TEXT PRIMARY KEY,
+      batch_id TEXT NOT NULL,
+      client_id TEXT NOT NULL,
+      kind TEXT NOT NULL,
+      previous_json TEXT
+    );
   `)
 
   ensureColumn(db, "clients", "address", "address TEXT NOT NULL DEFAULT ''")
@@ -115,6 +132,7 @@ function migrate(db) {
   ensureColumn(db, "clients", "birth_date", "birth_date TEXT")
   ensureColumn(db, "clients", "postal_code", "postal_code TEXT NOT NULL DEFAULT ''")
   ensureColumn(db, "clients", "city", "city TEXT NOT NULL DEFAULT ''")
+  ensureColumn(db, "clients", "guardian_id", "guardian_id TEXT")
   // Facture réellement générée par Stripe (Stripe Invoicing) pour cette charge, quand elle existe :
   // on préfère toujours la vraie facture Stripe à celle que l'on génère nous-mêmes.
   ensureColumn(db, "transactions", "stripe_invoice_pdf_url", "stripe_invoice_pdf_url TEXT")
@@ -198,8 +216,8 @@ function getClients() {
 function createClient(client) {
   getDb()
     .prepare(
-      `INSERT INTO clients (id, stripe_customer_id, first_name, last_name, email, status, method, paid, address, phone, birth_date, postal_code, city)
-       VALUES (@id, @stripeCustomerId, @firstName, @lastName, @email, @status, @method, @paid, @address, @phone, @birthDate, @postalCode, @city)`,
+      `INSERT INTO clients (id, stripe_customer_id, first_name, last_name, email, status, method, paid, address, phone, birth_date, postal_code, city, guardian_id)
+       VALUES (@id, @stripeCustomerId, @firstName, @lastName, @email, @status, @method, @paid, @address, @phone, @birthDate, @postalCode, @city, @guardianId)`,
     )
     .run({
       ...client,
@@ -210,7 +228,12 @@ function createClient(client) {
       birthDate: client.birthDate ?? null,
       postalCode: client.postalCode ?? "",
       city: client.city ?? "",
+      guardianId: client.guardianId ?? null,
     })
+}
+
+function getClientById(id) {
+  return getDb().prepare("SELECT * FROM clients WHERE id = ?").get(id) ?? null
 }
 
 function upsertClientByStripeId(client) {
@@ -247,6 +270,16 @@ function findGuestClient({ email, firstName, lastName }) {
        WHERE stripe_customer_id IS NULL AND (email IS NULL OR email = '') AND first_name = @firstName AND last_name = @lastName`,
     )
     .get({ firstName, lastName })
+}
+
+/** Retrouve TOUS les clients partageant un même email exact (insensible à la casse), sans repli
+ * sur le nom — un email peut être partagé par plusieurs personnes différentes (ex. parent/enfant),
+ * donc on ne s'arrête jamais au premier résultat trouvé. */
+function findClientsByEmail(email) {
+  if (!email) return []
+  return getDb()
+    .prepare("SELECT * FROM clients WHERE email <> '' AND lower(email) = lower(@email)")
+    .all({ email })
 }
 
 /** Retrouve un client existant pour l'import Excel : par email (insensible à la casse) en priorité, sinon par prénom+nom exacts (insensible à la casse). */
@@ -348,6 +381,7 @@ function updateClient(id, patch) {
     ["birthDate", "birth_date"],
     ["postalCode", "postal_code"],
     ["city", "city"],
+    ["guardianId", "guardian_id"],
   ]) {
     if (patch[key] !== undefined) {
       fields.push(`${column} = @${key}`)
@@ -360,6 +394,39 @@ function updateClient(id, patch) {
 
 function deleteClient(id) {
   getDb().prepare("DELETE FROM clients WHERE id = ?").run(id)
+}
+
+/* ---------- Lots d'import (Excel clients) : traçabilité pour permettre l'annulation ---------- */
+function createImportBatch({ id, createdCount, updatedCount, skippedCount }) {
+  getDb()
+    .prepare(
+      `INSERT INTO import_batches (id, created_count, updated_count, skipped_count)
+       VALUES (@id, @createdCount, @updatedCount, @skippedCount)`,
+    )
+    .run({ id, createdCount, updatedCount, skippedCount })
+}
+
+function addImportBatchChange({ id, batchId, clientId, kind, previousJson }) {
+  getDb()
+    .prepare(
+      `INSERT INTO import_batch_changes (id, batch_id, client_id, kind, previous_json)
+       VALUES (@id, @batchId, @clientId, @kind, @previousJson)`,
+    )
+    .run({ id, batchId, clientId, kind, previousJson: previousJson ?? null })
+}
+
+function getImportBatches() {
+  return getDb()
+    .prepare("SELECT * FROM import_batches ORDER BY created_at DESC LIMIT 10")
+    .all()
+}
+
+function getImportBatchChanges(batchId) {
+  return getDb().prepare("SELECT * FROM import_batch_changes WHERE batch_id = ?").all(batchId)
+}
+
+function markImportBatchUndone(batchId) {
+  getDb().prepare("UPDATE import_batches SET undone = 1 WHERE id = ?").run(batchId)
 }
 
 /* ---------- Transactions ---------- */
@@ -573,13 +640,20 @@ module.exports = {
   deleteUser,
   getClients,
   createClient,
+  getClientById,
   upsertClientByStripeId,
   upsertGuestClient,
   applyDetectedCourseType,
+  findClientsByEmail,
   findClientForImport,
   findClientForTransaction,
   updateClient,
   deleteClient,
+  createImportBatch,
+  addImportBatchChange,
+  getImportBatches,
+  getImportBatchChanges,
+  markImportBatchUndone,
   getTransactions,
   getTransactionById,
   createTransaction,

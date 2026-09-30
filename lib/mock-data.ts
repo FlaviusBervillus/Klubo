@@ -99,6 +99,7 @@ export interface Client {
   birthDate: string | null
   postalCode: string
   city: string
+  guardianId: string | null
 }
 
 /* ---------- Helpers ---------- */

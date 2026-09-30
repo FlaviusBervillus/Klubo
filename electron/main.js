@@ -10,7 +10,7 @@ const stripeSync = require("./stripe-sync")
 const gocardlessSync = require("./gocardless-sync")
 const megaSync = require("./mega-sync")
 const { generateReceiptPdf, renderInvoiceHtml } = require("./invoice-pdf")
-const { importClientsFromExcel } = require("./excel-import")
+const excelImport = require("./excel-import")
 const { setupAutoUpdater } = require("./updater")
 
 const PROTOCOL = "klubo"
@@ -98,7 +98,7 @@ ipcMain.handle("db:createClient", (_e, client) => {
 ipcMain.handle("db:updateClient", (_e, id, patch) => db.updateClient(id, patch))
 ipcMain.handle("db:deleteClient", (_e, id) => db.deleteClient(id))
 
-ipcMain.handle("clients:import-excel", async () => {
+ipcMain.handle("clients:analyze-excel-import", async () => {
   try {
     const { canceled, filePaths } = await dialog.showOpenDialog(mainWindow, {
       title: "Importer un fichier Excel de clients",
@@ -106,12 +106,32 @@ ipcMain.handle("clients:import-excel", async () => {
       properties: ["openFile"],
     })
     if (canceled || !filePaths[0]) return { ok: false, canceled: true }
-    const result = await importClientsFromExcel(filePaths[0])
+    const items = await excelImport.analyzeImport(filePaths[0])
+    return { ok: true, items }
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) }
+  }
+})
+
+ipcMain.handle("clients:apply-excel-import", (_e, items, decisions) => {
+  try {
+    const result = excelImport.applyImport(items, decisions)
     return { ok: true, ...result }
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : String(err) }
   }
 })
+
+ipcMain.handle("clients:undo-import", (_e, batchId) => {
+  try {
+    excelImport.undoImport(batchId)
+    return { ok: true }
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) }
+  }
+})
+
+ipcMain.handle("clients:list-import-batches", () => db.getImportBatches())
 
 ipcMain.handle("db:getTransactions", () => db.getTransactions())
 ipcMain.handle("db:createTransaction", (_e, tx) => {

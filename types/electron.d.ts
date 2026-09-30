@@ -30,6 +30,52 @@ export interface DbClient {
   birth_date: string | null
   postal_code: string
   city: string
+  guardian_id: string | null
+}
+
+export interface ImportPlanItem {
+  rowIndex: number
+  firstName: string
+  lastName: string
+  email: string
+  phone: string
+  address: string
+  postalCode: string
+  city: string
+  birthDate: string | null
+  category: string
+  courseType: string | null
+  kind: "create" | "update"
+  matchedClientId: string | null
+  existingSnapshot: {
+    firstName: string
+    lastName: string
+    email: string
+    phone: string
+    address: string
+    postalCode: string
+    city: string
+    birthDate: string | null
+    status: string
+  } | null
+  patch: Record<string, unknown> | null
+  relatedClientId: string | null
+  relatedClientName: string | null
+  clusterRowIndexes: number[]
+}
+
+export interface ImportDecision {
+  proceed?: boolean
+  guardian?: { type: "row"; rowIndex: number } | { type: "client"; clientId: string } | null
+}
+
+export interface ImportBatch {
+  id: string
+  created_count: number
+  updated_count: number
+  skipped_count: number
+  undone: number
+  created_at: string
 }
 
 export interface DbTransaction {
@@ -90,10 +136,19 @@ declare global {
         createClient: (client: Record<string, unknown>) => Promise<void>
         updateClient: (id: string, patch: Record<string, unknown>) => Promise<void>
         deleteClient: (id: string) => Promise<void>
-        importClientsExcel: () => Promise<
-          | { ok: true; created: number; updated: number; skipped: number }
+        analyzeExcelImport: () => Promise<
+          | { ok: true; items: ImportPlanItem[] }
           | { ok: false; error?: string; canceled?: boolean }
         >
+        applyExcelImport: (
+          items: ImportPlanItem[],
+          decisions: Record<number, ImportDecision>,
+        ) => Promise<
+          | { ok: true; batchId: string; created: number; updated: number; skipped: number; linked: number }
+          | { ok: false; error?: string }
+        >
+        undoImportBatch: (batchId: string) => Promise<{ ok: true } | { ok: false; error?: string }>
+        listImportBatches: () => Promise<ImportBatch[]>
 
         getTransactions: () => Promise<DbTransaction[]>
         createTransaction: (tx: Record<string, unknown>) => Promise<void>

@@ -49,6 +49,7 @@ const emptyForm = {
   birthDate: "",
   postalCode: "",
   city: "",
+  guardianId: "none",
 }
 
 function formFromClient(client: Client) {
@@ -64,16 +65,18 @@ function formFromClient(client: Client) {
     birthDate: client.birthDate ?? "",
     postalCode: client.postalCode,
     city: client.city,
+    guardianId: client.guardianId ?? "none",
   }
 }
 
 export function AddClientDialog({ client }: { client?: Client } = {}) {
   const { t } = useTranslation()
-  const { addClient, updateClient, available } = useClientsStore()
+  const { clients, addClient, updateClient, available } = useClientsStore()
   const { setClientSeasonInfo, hasActiveSeason } = useSeasonClients()
   const [open, setOpen] = useState(false)
   const [form, setForm] = useState(client ? formFromClient(client) : emptyForm)
   const isEdit = !!client
+  const guardianCandidates = clients.filter((c) => c.id !== client?.id)
 
   useEffect(() => {
     if (open) {
@@ -89,7 +92,10 @@ export function AddClientDialog({ client }: { client?: Client } = {}) {
     }
     if (isEdit) {
       const { status, paid, ...identity } = form
-      await updateClient(client.id, identity)
+      await updateClient(client.id, {
+        ...identity,
+        guardianId: identity.guardianId === "none" ? null : identity.guardianId,
+      })
       // Le cours et le paiement sont propres à la saison active ; sans saison sélectionnée,
       // on garde l'ancien comportement (écriture directe sur la fiche client).
       if (hasActiveSeason) {
@@ -100,7 +106,7 @@ export function AddClientDialog({ client }: { client?: Client } = {}) {
     } else {
       // À la création, le cours/paiement saisis deviennent la valeur par défaut de la fiche,
       // reprise pour la saison active tant qu'aucune valeur n'a été fixée explicitement pour elle.
-      await addClient(form)
+      await addClient({ ...form, guardianId: form.guardianId === "none" ? null : form.guardianId })
       setForm(emptyForm)
     }
     setOpen(false)
@@ -270,6 +276,28 @@ export function AddClientDialog({ client }: { client?: Client } = {}) {
                 checked={form.paid}
                 onCheckedChange={(checked) => setForm((f) => ({ ...f, paid: checked }))}
               />
+            </Field>
+
+            <Field>
+              <FieldLabel>{t.clients.guardianFieldLabel}</FieldLabel>
+              <Select
+                value={form.guardianId}
+                onValueChange={(v) => setForm((f) => ({ ...f, guardianId: v ?? "none" }))}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder={t.clients.guardianFieldNone} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    <SelectItem value="none">{t.clients.guardianFieldNone}</SelectItem>
+                    {guardianCandidates.map((c) => (
+                      <SelectItem key={c.id} value={c.id}>
+                        {`${c.firstName} ${c.lastName}`.trim()}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
             </Field>
           </FieldGroup>
 
