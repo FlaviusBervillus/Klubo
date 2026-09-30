@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import { ZoomInIcon, ZoomOutIcon } from "lucide-react"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
@@ -27,6 +28,11 @@ import { useTranslation } from "@/lib/i18n/context"
 import type { ReceiptOverrides } from "@/types/electron"
 
 const emptyForm = { firstName: "", lastName: "", email: "", address: "" }
+const ZOOM_STEP = 0.25
+const ZOOM_MIN = 0.5
+const ZOOM_MAX = 2
+const PREVIEW_BASE_WIDTH = 760
+const PREVIEW_BASE_HEIGHT = 500
 
 interface ReceiptPreviewDialogProps {
   transactionId: string | null
@@ -42,9 +48,12 @@ export function ReceiptPreviewDialog({ transactionId, onOpenChange }: ReceiptPre
   const [selectedClientId, setSelectedClientId] = useState("")
   const [form, setForm] = useState(emptyForm)
   const [html, setHtml] = useState("")
+  const [stripeInvoicePdfUrl, setStripeInvoicePdfUrl] = useState<string | null>(null)
+  const [zoom, setZoom] = useState(1)
   const [busy, setBusy] = useState(false)
 
   const open = !!transactionId
+  const isStripeInvoice = !!stripeInvoicePdfUrl
 
   useEffect(() => {
     if (!transactionId) {
@@ -52,6 +61,8 @@ export function ReceiptPreviewDialog({ transactionId, onOpenChange }: ReceiptPre
       setSelectedClientId("")
       setHasResolvedClient(false)
       setHtml("")
+      setStripeInvoicePdfUrl(null)
+      setZoom(1)
       return
     }
     let cancelled = false
@@ -73,6 +84,7 @@ export function ReceiptPreviewDialog({ transactionId, onOpenChange }: ReceiptPre
           email: result.client?.email ?? "",
           address: result.client?.address ?? "",
         })
+        setStripeInvoicePdfUrl(result.stripeInvoicePdfUrl ?? null)
       } else {
         toast.error(result.error || t.receiptPreview.title)
       }
@@ -86,7 +98,7 @@ export function ReceiptPreviewDialog({ transactionId, onOpenChange }: ReceiptPre
   }, [transactionId])
 
   useEffect(() => {
-    if (!transactionId || loading) return
+    if (!transactionId || loading || isStripeInvoice) return
     let cancelled = false
     async function refreshPreview() {
       const electronApi = window.electronAPI
@@ -99,7 +111,7 @@ export function ReceiptPreviewDialog({ transactionId, onOpenChange }: ReceiptPre
     return () => {
       cancelled = true
     }
-  }, [transactionId, loading, form, selectedClientId])
+  }, [transactionId, loading, isStripeInvoice, form, selectedClientId])
 
   function selectClient(id: string) {
     setSelectedClientId(id)
@@ -114,6 +126,17 @@ export function ReceiptPreviewDialog({ transactionId, onOpenChange }: ReceiptPre
     const electronApi = window.electronAPI
     if (!electronApi) return
     setBusy(true)
+    if (isStripeInvoice) {
+      const result = await electronApi.downloadStripeInvoice(transactionId)
+      setBusy(false)
+      if (result.ok) {
+        toast.success(t.transactionDetail.downloadReceipt, { description: result.path })
+        onOpenChange(false)
+      } else if (!result.canceled) {
+        toast.error(result.error || t.transactionDetail.downloadReceipt)
+      }
+      return
+    }
     const overrides: ReceiptOverrides = { clientId: selectedClientId || null, ...form }
     const result = await electronApi.downloadReceipt(transactionId, overrides)
     setBusy(false)
@@ -130,13 +153,23 @@ export function ReceiptPreviewDialog({ transactionId, onOpenChange }: ReceiptPre
       <DialogContent className="sm:max-w-3xl">
         <DialogHeader>
           <DialogTitle>{t.receiptPreview.title}</DialogTitle>
-          <DialogDescription>{t.receiptPreview.description}</DialogDescription>
+          <DialogDescription>
+            {isStripeInvoice ? t.receiptPreview.stripeDescription : t.receiptPreview.description}
+          </DialogDescription>
         </DialogHeader>
 
         {loading ? (
           <p className="py-10 text-center text-sm text-muted-foreground">
             {t.receiptPreview.loading}
           </p>
+        ) : isStripeInvoice ? (
+          <div className="overflow-hidden rounded-lg border bg-white">
+            <iframe
+              title={t.receiptPreview.title}
+              src={stripeInvoicePdfUrl ?? undefined}
+              className="h-[70vh] w-full"
+            />
+          </div>
         ) : (
           <div className="grid gap-6 md:grid-cols-2">
             <FieldGroup>
@@ -205,12 +238,52 @@ export function ReceiptPreviewDialog({ transactionId, onOpenChange }: ReceiptPre
               </Field>
             </FieldGroup>
 
-            <div className="overflow-hidden rounded-lg border bg-white">
-              <iframe
-                title={t.receiptPreview.title}
-                srcDoc={html}
-                className="h-full min-h-96 w-full"
-              />
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center justify-end gap-1">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label={t.receiptPreview.zoomOut}
+                  disabled={zoom <= ZOOM_MIN}
+                  onClick={() => setZoom((z) => Math.max(ZOOM_MIN, +(z - ZOOM_STEP).toFixed(2)))}
+                >
+                  <ZoomOutIcon />
+                </Button>
+                <span className="w-10 text-center font-mono text-xs text-muted-foreground tabular-nums">
+                  {Math.round(zoom * 100)}%
+                </span>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label={t.receiptPreview.zoomIn}
+                  disabled={zoom >= ZOOM_MAX}
+                  onClick={() => setZoom((z) => Math.min(ZOOM_MAX, +(z + ZOOM_STEP).toFixed(2)))}
+                >
+                  <ZoomInIcon />
+                </Button>
+              </div>
+              <div className="h-96 overflow-auto rounded-lg border bg-white">
+                <div
+                  style={{
+                    width: PREVIEW_BASE_WIDTH * zoom,
+                    height: PREVIEW_BASE_HEIGHT * zoom,
+                  }}
+                >
+                  <iframe
+                    title={t.receiptPreview.title}
+                    srcDoc={html}
+                    style={{
+                      width: PREVIEW_BASE_WIDTH,
+                      height: PREVIEW_BASE_HEIGHT,
+                      border: 0,
+                      transform: `scale(${zoom})`,
+                      transformOrigin: "top left",
+                    }}
+                  />
+                </div>
+              </div>
             </div>
           </div>
         )}

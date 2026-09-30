@@ -50,8 +50,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { Input } from "@/components/ui/input"
 import { MethodBadge, StatusBadge, Amount } from "@/components/finance-badges"
 import { ReceiptPreviewDialog } from "@/components/transactions/receipt-preview-dialog"
+import { useClientsStore } from "@/lib/clients-store"
 import { useClubSettings } from "@/lib/club-settings"
 import { useTranslation } from "@/lib/i18n/context"
 import {
@@ -61,14 +63,19 @@ import {
   type Category,
   type Transaction,
 } from "@/lib/mock-data"
-import { downloadReceiptOrOpenPreview } from "@/lib/receipt-actions"
 import { useTransactionsStore } from "@/lib/transactions-store"
 
 export function TransactionDetailView() {
   const { t } = useTranslation()
   const searchParams = useSearchParams()
   const id = searchParams.get("id") ?? ""
-  const { getTransaction, loaded, categorize: categorizeInStore } = useTransactionsStore()
+  const {
+    getTransaction,
+    loaded,
+    categorize: categorizeInStore,
+    updateMember: updateMemberInStore,
+  } = useTransactionsStore()
+  const { clients } = useClientsStore()
   const tx = getTransaction(id)
   const [previewOpen, setPreviewOpen] = useState(false)
 
@@ -93,7 +100,7 @@ export function TransactionDetailView() {
   const txId = tx.id
 
   function openReceiptPreview() {
-    downloadReceiptOrOpenPreview(txId, t, () => setPreviewOpen(true))
+    setPreviewOpen(true)
   }
 
   function changeCategory(targetCategory: Category) {
@@ -201,11 +208,24 @@ export function TransactionDetailView() {
             </MetaRow>
             <Separator />
             <MetaRow icon={UserIcon} label={t.transactionDetail.linkedMember}>
-              {tx.member ?? (
-                <span className="text-muted-foreground">
-                  {t.transactionDetail.none}
-                </span>
-              )}
+              <Input
+                key={tx.id}
+                list="linked-member-suggestions"
+                defaultValue={tx.member ?? ""}
+                placeholder={t.transactionDetail.none}
+                className="h-7 w-44 border-transparent bg-transparent px-2 text-right text-sm font-medium hover:border-input"
+                onBlur={(e) => {
+                  const value = e.target.value.trim()
+                  if (value !== (tx.member ?? "")) {
+                    updateMemberInStore(txId, value || null)
+                  }
+                }}
+              />
+              <datalist id="linked-member-suggestions">
+                {clients.map((c) => (
+                  <option key={c.id} value={`${c.firstName} ${c.lastName}`.trim()} />
+                ))}
+              </datalist>
             </MetaRow>
           </CardContent>
         </Card>
@@ -349,6 +369,7 @@ function StripeStat({
 }
 
 function ReceiptPreview({ tx }: { tx: Transaction }) {
+  const { t } = useTranslation()
   const isImage = tx.justificatif?.type === "image"
   return (
     <Dialog>
@@ -367,22 +388,22 @@ function ReceiptPreview({ tx }: { tx: Transaction }) {
             ) : (
               <FileTextIcon className="size-3.5" />
             )}
-            {isImage ? "Image" : "PDF"}
+            {isImage ? t.transactionDetail.imageLabel : t.transactionDetail.pdfLabel}
           </span>
           <Badge variant="secondary" className="text-[10px]">
-            Justificatif
+            {t.transactionDetail.receipt}
           </Badge>
         </div>
         <ReceiptDocument tx={tx} />
         <span className="text-center text-xs text-muted-foreground opacity-0 transition-opacity group-hover/preview:opacity-100">
-          Cliquer pour agrandir
+          {t.transactionDetail.clickToEnlarge}
         </span>
       </DialogTrigger>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>{tx.justificatif?.name}</DialogTitle>
           <DialogDescription>
-            Aperçu généré à partir des données de la transaction {tx.id}.
+            {t.transactionDetail.previewDescriptionPrefix} {tx.id}.
           </DialogDescription>
         </DialogHeader>
         <ReceiptDocument tx={tx} large />
@@ -399,6 +420,7 @@ function ReceiptDocument({
   large?: boolean
 }) {
   const { settings } = useClubSettings()
+  const { t } = useTranslation()
 
   return (
     <div
@@ -409,31 +431,31 @@ function ReceiptDocument({
     >
       <div className="flex flex-col items-center gap-0.5 border-b border-dashed pb-3 text-center">
         <span className="font-semibold">{settings.name}</span>
-        <span className="text-muted-foreground">Reçu de paiement</span>
+        <span className="text-muted-foreground">{t.transactionDetail.receiptDocTitle}</span>
       </div>
       <dl className="flex flex-col gap-1.5">
         <div className="flex items-center justify-between gap-4">
-          <dt className="text-muted-foreground">Date</dt>
+          <dt className="text-muted-foreground">{t.transactionDetail.date}</dt>
           <dd>{formatDate(tx.date, true)}</dd>
         </div>
         <div className="flex items-center justify-between gap-4">
-          <dt className="text-muted-foreground">Référence</dt>
+          <dt className="text-muted-foreground">{t.transactionDetail.reference}</dt>
           <dd>{tx.id}</dd>
         </div>
         <div className="flex items-center justify-between gap-4">
-          <dt className="text-muted-foreground">Motif</dt>
+          <dt className="text-muted-foreground">{t.transactionDetail.reason}</dt>
           <dd className="max-w-40 truncate text-right">{tx.description}</dd>
         </div>
         {tx.member ? (
           <div className="flex items-center justify-between gap-4">
-            <dt className="text-muted-foreground">Adhérent</dt>
+            <dt className="text-muted-foreground">{t.transactionDetail.linkedMember}</dt>
             <dd>{tx.member}</dd>
           </div>
         ) : null}
       </dl>
       <Separator />
       <div className="flex items-center justify-between font-semibold">
-        <span>Total</span>
+        <span>{t.common.total}</span>
         <span className="tabular-nums">{formatEuro(tx.amount)}</span>
       </div>
     </div>

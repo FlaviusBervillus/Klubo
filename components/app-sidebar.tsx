@@ -87,7 +87,7 @@ export function AppSidebar() {
 
       <SidebarContent>
         <SidebarGroup>
-          <SidebarGroupLabel>Navigation</SidebarGroupLabel>
+          <SidebarGroupLabel>{t.nav.groupLabel}</SidebarGroupLabel>
           <SidebarMenu>
             {nav.map((item) => {
               const active =

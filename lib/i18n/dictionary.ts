@@ -18,6 +18,8 @@ export interface Dictionary {
     logout: string
     all: string
     total: string
+    actions: string
+    choose: string
   }
   nav: {
     dashboard: string
@@ -26,6 +28,7 @@ export interface Dictionary {
     reports: string
     settings: string
     users: string
+    groupLabel: string
   }
   header: {
     toggleTheme: string
@@ -124,17 +127,32 @@ export interface Dictionary {
     classify: string
     changeCategory: string
     categoryChanged: string
+    classifiedSuccess: string
     noResults: string
     resultsCount: string
     addTransaction: string
+    newDialogTitle: string
+    newDialogSubtitle: string
+    operationDirectionLabel: string
+    descriptionLabel: string
+    descriptionPlaceholder: string
+    amountLabel: string
+    linkedMemberOptionalLabel: string
+    memberPlaceholder: string
+    linkedMemberHint: string
+    savedTitle: string
+    savedDescription: string
   }
   receiptPreview: {
     title: string
     description: string
+    stripeDescription: string
     linkClient: string
     manualOption: string
     loading: string
     download: string
+    zoomIn: string
+    zoomOut: string
   }
   transactionDetail: {
     pageTitle: string
@@ -159,6 +177,13 @@ export interface Dictionary {
     netAmount: string
     refundedAmount: string
     rawPayload: string
+    receiptDocTitle: string
+    reference: string
+    reason: string
+    imageLabel: string
+    pdfLabel: string
+    clickToEnlarge: string
+    previewDescriptionPrefix: string
   }
   reports: {
     title: string
@@ -178,6 +203,11 @@ export interface Dictionary {
     netResult: string
     netResultPositive: string
     netResultNegative: string
+    categoryColumn: string
+    exportCsvSuccessTitle: string
+    downloadedSuffix: string
+    printPreviewTitle: string
+    printPreviewHint: string
   }
   settings: {
     title: string
@@ -201,6 +231,8 @@ export interface Dictionary {
     fieldSignature: string
     changeSignature: string
     removeSignature: string
+    fieldSignatoryRole: string
+    signatoryRolePlaceholder: string
     identitySaved: string
     stripeTitle: string
     stripeSubtitle: string
@@ -274,6 +306,29 @@ export interface Dictionary {
     megaListError: string
     selectBackupToRestore: string
     noBackupsFound: string
+    credentialsSavedTitle: string
+    credentialsSavedDescription: string
+    stripeKeysDialogTitle: string
+    stripeKeysDialogDescription: string
+    stripeSecretKeyLabel: string
+    stripeSecretKeyDescription: string
+    stripeWebhookSecretLabel: string
+    stripeWebhookSecretDescription: string
+    megaKeysDialogTitle: string
+    megaKeysDialogDescription: string
+    megaEmailLabel: string
+    megaPasswordLabel: string
+    megaPasswordDescription: string
+    gocardlessKeysDialogTitle: string
+    gocardlessKeysDialogDescription: string
+    gocardlessSecretIdLabel: string
+    gocardlessSecretIdPlaceholder: string
+    gocardlessSecretIdDescription: string
+    gocardlessSecretKeyLabel: string
+    syncResultCustomersLabel: string
+    syncResultChargesLabel: string
+    syncResultDisputesLabel: string
+    syncResultOperationsImportedSuffix: string
   }
   clients: {
     title: string

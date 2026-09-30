@@ -35,27 +35,26 @@ import { formatDate } from "@/lib/mock-data"
 import { useSecureVault } from "@/lib/secure-vault"
 import { ApiCredentialsDialog } from "@/components/parametres/api-credentials-dialog"
 
-const fields = [
-  {
-    key: "gocardlessSecretId",
-    label: "Secret ID GoCardless",
-    placeholder: "sandbox_… ou live_…",
-    type: "text" as const,
-    description: "GoCardless Bank Account Data → Créer des identifiants API.",
-  },
-  {
-    key: "gocardlessSecretKey",
-    label: "Secret Key GoCardless",
-    placeholder: "••••••••",
-  },
-]
-
 function api() {
   return typeof window !== "undefined" ? window.electronAPI : undefined
 }
 
 export function GoCardlessCard() {
   const { t } = useTranslation()
+  const fields = [
+    {
+      key: "gocardlessSecretId",
+      label: t.settings.gocardlessSecretIdLabel,
+      placeholder: t.settings.gocardlessSecretIdPlaceholder,
+      type: "text" as const,
+      description: t.settings.gocardlessSecretIdDescription,
+    },
+    {
+      key: "gocardlessSecretKey",
+      label: t.settings.gocardlessSecretKeyLabel,
+      placeholder: "••••••••",
+    },
+  ]
   const { data, setSecret } = useSecureVault()
   const configured = !!data.gocardlessSecretId && !!data.gocardlessSecretKey
   const [lastSync, setLastSync] = useState<string | null>(null)
@@ -89,7 +88,7 @@ export function GoCardlessCard() {
         const state = await electronApi.db.getSyncState("gocardless")
         setLastSync(state?.last_synced_at ?? null)
         toast.success(t.settings.gocardlessSyncDone, {
-          description: `${result.count} opérations importées`,
+          description: `${result.count} ${t.settings.syncResultOperationsImportedSuffix}`,
         })
       } else {
         toast.error(t.settings.gocardlessSyncError, { description: result.error })
@@ -187,8 +186,8 @@ export function GoCardlessCard() {
 
         <div className="mt-1 flex flex-col gap-2 sm:flex-row">
           <ApiCredentialsDialog
-            title="Clés API GoCardless"
-            description="Utilisées pour synchroniser le relevé bancaire réel. Chiffrées dans le coffre-fort local."
+            title={t.settings.gocardlessKeysDialogTitle}
+            description={t.settings.gocardlessKeysDialogDescription}
             fields={fields}
             values={data}
             onSave={setSecret}

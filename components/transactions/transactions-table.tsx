@@ -130,8 +130,8 @@ export function TransactionsTable() {
 
   function categorize(id: string, targetCategory: Category) {
     categorizeInStore(id, targetCategory)
-    toast.success("Transaction catégorisée", {
-      description: `Classée dans « ${t.categories[targetCategory]} » et validée.`,
+    toast.success(t.transactions.classifiedSuccess, {
+      description: t.categories[targetCategory],
     })
   }
 
@@ -375,7 +375,7 @@ export function TransactionsTable() {
                             variant="ghost"
                             size="icon"
                             className="size-8"
-                            aria-label="Actions"
+                            aria-label={t.common.actions}
                           />
                         }
                       >

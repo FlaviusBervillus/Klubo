@@ -83,8 +83,8 @@ export function AddTransactionDialog({
     setForm(emptyForm)
     setType("entree")
     setOpen(false)
-    toast.success("Transaction enregistrée", {
-      description: "L'écriture a été ajoutée au journal comptable.",
+    toast.success(t.transactions.savedTitle, {
+      description: t.transactions.savedDescription,
     })
   }
 
@@ -105,15 +105,15 @@ export function AddTransactionDialog({
       <DialogContent className="sm:max-w-lg">
         <form onSubmit={handleSubmit}>
           <DialogHeader>
-            <DialogTitle>Nouvelle transaction manuelle</DialogTitle>
+            <DialogTitle>{t.transactions.newDialogTitle}</DialogTitle>
             <DialogDescription>
-              Saisissez une écriture comptable pour le journal du club.
+              {t.transactions.newDialogSubtitle}
             </DialogDescription>
           </DialogHeader>
 
           <FieldGroup className="py-4">
             <Field>
-              <FieldLabel>Sens de l&apos;opération</FieldLabel>
+              <FieldLabel>{t.transactions.operationDirectionLabel}</FieldLabel>
               <ToggleGroup
                 value={[type]}
                 onValueChange={(v) => v[0] && setType(v[0] as TransactionType)}
@@ -129,10 +129,10 @@ export function AddTransactionDialog({
             </Field>
 
             <Field>
-              <FieldLabel htmlFor="tx-desc">Description</FieldLabel>
+              <FieldLabel htmlFor="tx-desc">{t.transactions.descriptionLabel}</FieldLabel>
               <Input
                 id="tx-desc"
-                placeholder="Ex. Cotisation annuelle — Jean Dupont"
+                placeholder={t.transactions.descriptionPlaceholder}
                 required
                 value={form.description}
                 onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
@@ -141,7 +141,7 @@ export function AddTransactionDialog({
 
             <div className="grid grid-cols-2 gap-4">
               <Field>
-                <FieldLabel htmlFor="tx-amount">Montant (€)</FieldLabel>
+                <FieldLabel htmlFor="tx-amount">{t.transactions.amountLabel}</FieldLabel>
                 <Input
                   id="tx-amount"
                   type="number"
@@ -174,7 +174,7 @@ export function AddTransactionDialog({
                   onValueChange={(v) => v && setForm((f) => ({ ...f, category: v as Category }))}
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="Choisir" />
+                    <SelectValue placeholder={t.common.choose} />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectGroup>
@@ -195,7 +195,7 @@ export function AddTransactionDialog({
                   onValueChange={(v) => v && setForm((f) => ({ ...f, method: v as PaymentMethod }))}
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="Choisir" />
+                    <SelectValue placeholder={t.common.choose} />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectGroup>
@@ -211,15 +211,15 @@ export function AddTransactionDialog({
             </div>
 
             <Field>
-              <FieldLabel htmlFor="tx-member">Adhérent lié (optionnel)</FieldLabel>
+              <FieldLabel htmlFor="tx-member">{t.transactions.linkedMemberOptionalLabel}</FieldLabel>
               <Input
                 id="tx-member"
-                placeholder="Nom de l'adhérent"
+                placeholder={t.transactions.memberPlaceholder}
                 value={form.member}
                 onChange={(e) => setForm((f) => ({ ...f, member: e.target.value }))}
               />
               <FieldDescription>
-                Rattachez l&apos;écriture à un adhérent pour le suivi des cotisations.
+                {t.transactions.linkedMemberHint}
               </FieldDescription>
             </Field>
           </FieldGroup>

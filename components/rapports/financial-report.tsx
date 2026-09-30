@@ -106,7 +106,7 @@ export function FinancialReport() {
   const positive = net >= 0
 
   function exportCsv() {
-    const header = ["Catégorie", ...months, t.common.total]
+    const header = [t.reports.categoryColumn, ...months, t.common.total]
     const rows: string[][] = [header, [t.reports.revenueSection]]
     for (const r of revenue) {
       rows.push([r.category, ...r.values.map(String), String(sum(r.values))])
@@ -127,14 +127,14 @@ export function FinancialReport() {
     a.download = `rapport-${period}-${new Date().toISOString().slice(0, 10)}.csv`
     a.click()
     URL.revokeObjectURL(url)
-    toast.success("Export CSV généré", {
-      description: `${a.download} téléchargé.`,
+    toast.success(t.reports.exportCsvSuccessTitle, {
+      description: `${a.download} ${t.reports.downloadedSuffix}`,
     })
   }
 
   function generatePdf() {
-    toast.info("Ouverture de l'aperçu d'impression", {
-      description: "Choisissez « Enregistrer en PDF » dans la boîte de dialogue.",
+    toast.info(t.reports.printPreviewTitle, {
+      description: t.reports.printPreviewHint,
     })
     window.print()
   }
@@ -177,7 +177,7 @@ export function FinancialReport() {
             <Table>
               <TableHeader>
                 <TableRow className="bg-muted/50">
-                  <TableHead>Catégorie</TableHead>
+                  <TableHead>{t.reports.categoryColumn}</TableHead>
                   {months.map((m) => (
                     <TableHead key={m} className="text-right whitespace-nowrap">
                       {m}

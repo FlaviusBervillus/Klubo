@@ -22,6 +22,7 @@ import {
   FieldLabel,
 } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
+import { useTranslation } from "@/lib/i18n/context"
 
 export type CredentialField = {
   key: string
@@ -46,6 +47,7 @@ export function ApiCredentialsDialog({
   onSave: (next: Record<string, string>) => void
   trigger?: React.ReactNode
 }) {
+  const { t } = useTranslation()
   const [open, setOpen] = useState(false)
   const [draft, setDraft] = useState<Record<string, string>>(values)
 
@@ -57,8 +59,8 @@ export function ApiCredentialsDialog({
     e.preventDefault()
     onSave(draft)
     setOpen(false)
-    toast.success("Identifiants enregistrés", {
-      description: "Chiffrés dans le coffre-fort local.",
+    toast.success(t.settings.credentialsSavedTitle, {
+      description: t.settings.credentialsSavedDescription,
     })
   }
 
@@ -71,7 +73,7 @@ export function ApiCredentialsDialog({
           ) : (
             <Button variant="outline" className="w-full">
               <KeyRoundIcon data-icon="inline-start" />
-              Configurer les clés API
+              {t.settings.configureKeys}
             </Button>
           )
         }
@@ -109,11 +111,11 @@ export function ApiCredentialsDialog({
             <DialogClose
               render={
                 <Button type="button" variant="outline">
-                  Annuler
+                  {t.common.cancel}
                 </Button>
               }
             />
-            <Button type="submit">Enregistrer</Button>
+            <Button type="submit">{t.common.save}</Button>
           </DialogFooter>
         </form>
       </DialogContent>

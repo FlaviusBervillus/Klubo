@@ -135,6 +135,7 @@ function getClubSettings() {
     logoUrl: settings.clubLogoUrl || null,
     stampUrl: settings.clubStampUrl || null,
     signatureUrl: settings.clubSignatureUrl || null,
+    signatoryRole: settings.clubSignatoryRole || null,
   }
 }
 

@@ -93,6 +93,7 @@ export function ClubIdentityCard() {
   const [address, setAddress] = useState(settings.address)
   const [phone, setPhone] = useState(settings.phone)
   const [rna, setRna] = useState(settings.rna)
+  const [signatoryRole, setSignatoryRole] = useState(settings.signatoryRole ?? "")
 
   useEffect(() => {
     setName(settings.name)
@@ -101,7 +102,16 @@ export function ClubIdentityCard() {
     setAddress(settings.address)
     setPhone(settings.phone)
     setRna(settings.rna)
-  }, [settings.name, settings.season, settings.stripeAccountName, settings.address, settings.phone, settings.rna])
+    setSignatoryRole(settings.signatoryRole ?? "")
+  }, [
+    settings.name,
+    settings.season,
+    settings.stripeAccountName,
+    settings.address,
+    settings.phone,
+    settings.rna,
+    settings.signatoryRole,
+  ])
 
   function handleLogoChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
@@ -116,7 +126,7 @@ export function ClubIdentityCard() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    await update({ name, season, stripeAccountName, address, phone, rna })
+    await update({ name, season, stripeAccountName, address, phone, rna, signatoryRole })
     toast.success(t.settings.identitySaved)
   }
 
@@ -257,6 +267,17 @@ export function ClubIdentityCard() {
                 onChange={(url) => update({ signatureUrl: url })}
               />
             </div>
+            <Field>
+              <FieldLabel htmlFor="club-signatory-role">
+                {t.settings.fieldSignatoryRole}
+              </FieldLabel>
+              <Input
+                id="club-signatory-role"
+                value={signatoryRole}
+                onChange={(e) => setSignatoryRole(e.target.value)}
+                placeholder={t.settings.signatoryRolePlaceholder}
+              />
+            </Field>
             <Button type="submit" className="w-fit">
               {t.common.save}
             </Button>

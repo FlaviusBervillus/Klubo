@@ -109,7 +109,7 @@ function renderInvoiceHtml(tx, club, client) {
   .col { flex: 1; line-height: 1.5; }
   .club-name { font-weight: 600; }
   .handle { display: inline-block; background: #f1f1f1; border-radius: 999px; padding: 1px 8px; font-size: 11px; margin-left: 6px; }
-  .logo { width: 56px; height: 56px; border-radius: 50%; object-fit: cover; }
+  .logo { width: 108px; height: 108px; border-radius: 50%; object-fit: cover; }
   .banner { font-weight: 600; margin: 24px 0; }
   table { width: 100%; border-collapse: collapse; margin-top: 8px; }
   thead th { text-align: left; font-size: 11px; color: #666; font-weight: 400; border-bottom: 1px solid #ddd; padding-bottom: 6px; }
@@ -120,11 +120,11 @@ function renderInvoiceHtml(tx, club, client) {
   .totals div { display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px solid #eee; }
   .totals .paid { font-weight: 700; border-bottom: none; margin-top: 4px; }
   .rna { margin-top: 32px; color: #444; }
-  .sign-row { display: flex; justify-content: space-between; align-items: flex-end; margin-top: 48px; }
+  .sign-row { display: flex; justify-content: flex-end; align-items: flex-end; gap: 20px; margin-top: 48px; }
   .sign-block { display: flex; flex-direction: column; align-items: center; gap: 4px; }
   .signature { max-height: 60px; max-width: 160px; object-fit: contain; }
   .sign-label { font-size: 11px; color: #888; border-top: 1px solid #ddd; padding-top: 4px; width: 160px; text-align: center; }
-  .stamp { max-height: 90px; max-width: 90px; object-fit: contain; }
+  .stamp { max-height: 90px; max-width: 90px; object-fit: contain; align-self: center; }
   .footer { position: fixed; bottom: 24px; left: 48px; right: 48px; border-top: 1px solid #ddd; padding-top: 8px; text-align: right; font-size: 11px; color: #888; }
 </style>
 </head>
@@ -186,11 +186,11 @@ function renderInvoiceHtml(tx, club, client) {
   ${
     club.stampUrl || club.signatureUrl
       ? `<div class="sign-row">
+          ${club.stampUrl ? `<img class="stamp" src="${club.stampUrl}" alt="" />` : ""}
           <div class="sign-block">
             ${club.signatureUrl ? `<img class="signature" src="${club.signatureUrl}" alt="" />` : ""}
-            <span class="sign-label">Signature</span>
+            <span class="sign-label">${club.signatoryRole ? escapeHtml(club.signatoryRole) : "Signature"}</span>
           </div>
-          ${club.stampUrl ? `<img class="stamp" src="${club.stampUrl}" alt="" />` : ""}
         </div>`
       : ""
   }

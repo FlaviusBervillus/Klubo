@@ -22,27 +22,26 @@ import { useSecureVault } from "@/lib/secure-vault"
 import { useTransactionsStore } from "@/lib/transactions-store"
 import { ApiCredentialsDialog } from "@/components/parametres/api-credentials-dialog"
 
-const fields = [
-  {
-    key: "stripeSecretKey",
-    label: "Clé secrète API",
-    placeholder: "sk_live_…",
-    description: "Dashboard Stripe → Développeurs → Clés API.",
-  },
-  {
-    key: "stripeWebhookSecret",
-    label: "Clé de signature webhook",
-    placeholder: "whsec_…",
-    description: "Dashboard Stripe → Développeurs → Webhooks → Signer.",
-  },
-]
-
 function api() {
   return typeof window !== "undefined" ? window.electronAPI : undefined
 }
 
 export function StripeConnectCard() {
   const { t } = useTranslation()
+  const fields = [
+    {
+      key: "stripeSecretKey",
+      label: t.settings.stripeSecretKeyLabel,
+      placeholder: "sk_live_…",
+      description: t.settings.stripeSecretKeyDescription,
+    },
+    {
+      key: "stripeWebhookSecret",
+      label: t.settings.stripeWebhookSecretLabel,
+      placeholder: "whsec_…",
+      description: t.settings.stripeWebhookSecretDescription,
+    },
+  ]
   const { settings } = useClubSettings()
   const { data, setSecret } = useSecureVault()
   const { refresh: refreshTransactions } = useTransactionsStore()
@@ -103,7 +102,7 @@ export function StripeConnectCard() {
     if (result.ok) {
       await Promise.all([refreshTransactions(), refreshClients()])
       toast.success(t.settings.syncSuccess, {
-        description: `${result.customers} clients · ${result.charges} transactions · ${result.disputes} litiges`,
+        description: `${result.customers} ${t.settings.syncResultCustomersLabel} · ${result.charges} ${t.settings.syncResultChargesLabel} · ${result.disputes} ${t.settings.syncResultDisputesLabel}`,
       })
     } else {
       toast.error(t.settings.syncError, { description: result.error })
@@ -164,8 +163,8 @@ export function StripeConnectCard() {
 
         <div className="mt-1 flex flex-col gap-2 sm:flex-row">
           <ApiCredentialsDialog
-            title="Clés API Stripe Connect"
-            description="Utilisées pour encaisser les cotisations et importer les vraies données. Chiffrées dans le coffre-fort local."
+            title={t.settings.stripeKeysDialogTitle}
+            description={t.settings.stripeKeysDialogDescription}
             fields={fields}
             values={data}
             onSave={setSecret}

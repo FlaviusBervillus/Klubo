@@ -37,27 +37,26 @@ import { formatDate } from "@/lib/mock-data"
 import { useSecureVault } from "@/lib/secure-vault"
 import { ApiCredentialsDialog } from "@/components/parametres/api-credentials-dialog"
 
-const fields = [
-  {
-    key: "megaEmail",
-    label: "Email Mega",
-    placeholder: "tresorier@club.fr",
-    type: "text" as const,
-  },
-  {
-    key: "megaPassword",
-    label: "Mot de passe Mega",
-    placeholder: "••••••••",
-    description: "Utilisé pour se connecter à votre vrai compte Mega.",
-  },
-]
-
 function api() {
   return typeof window !== "undefined" ? window.electronAPI : undefined
 }
 
 export function BackupCard() {
   const { t } = useTranslation()
+  const fields = [
+    {
+      key: "megaEmail",
+      label: t.settings.megaEmailLabel,
+      placeholder: "tresorier@club.fr",
+      type: "text" as const,
+    },
+    {
+      key: "megaPassword",
+      label: t.settings.megaPasswordLabel,
+      placeholder: "••••••••",
+      description: t.settings.megaPasswordDescription,
+    },
+  ]
   const { data, setSecret } = useSecureVault()
   const configured = !!data.megaEmail && !!data.megaPassword
 
@@ -162,8 +161,8 @@ export function BackupCard() {
         </Row>
 
         <ApiCredentialsDialog
-          title="Identifiants Mega"
-          description="Votre vrai compte Mega pour sauvegarder/restaurer la base. Chiffrés dans le coffre-fort local."
+          title={t.settings.megaKeysDialogTitle}
+          description={t.settings.megaKeysDialogDescription}
           fields={fields}
           values={data}
           onSave={setSecret}

@@ -62,6 +62,7 @@ const TransactionsContext = createContext<{
   available: boolean
   getTransaction: (id: string) => Transaction | undefined
   categorize: (id: string, category: Category) => Promise<void>
+  updateMember: (id: string, member: string | null) => Promise<void>
   addTransaction: (input: NewTransaction) => Promise<void>
   refresh: () => Promise<void>
 } | null>(null)
@@ -95,6 +96,15 @@ export function TransactionsProvider({ children }: { children: React.ReactNode }
     )
   }
 
+  async function updateMember(id: string, member: string | null) {
+    const electronApi = api()
+    if (!electronApi) return
+    await electronApi.db.updateTransaction(id, { member })
+    setTransactions((prev) =>
+      prev.map((tx) => (tx.id === id ? { ...tx, member } : tx)),
+    )
+  }
+
   async function addTransaction(input: NewTransaction) {
     const electronApi = api()
     if (!electronApi) return
@@ -108,7 +118,16 @@ export function TransactionsProvider({ children }: { children: React.ReactNode }
 
   return (
     <TransactionsContext.Provider
-      value={{ transactions, loaded, available, getTransaction, categorize, addTransaction, refresh }}
+      value={{
+        transactions,
+        loaded,
+        available,
+        getTransaction,
+        categorize,
+        updateMember,
+        addTransaction,
+        refresh,
+      }}
     >
       {children}
     </TransactionsContext.Provider>

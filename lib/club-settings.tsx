@@ -12,6 +12,7 @@ export interface ClubSettings {
   rna: string
   stampUrl: string | null
   signatureUrl: string | null
+  signatoryRole: string | null
 }
 
 const defaultSettings: ClubSettings = {
@@ -24,6 +25,7 @@ const defaultSettings: ClubSettings = {
   rna: "",
   stampUrl: null,
   signatureUrl: null,
+  signatoryRole: null,
 }
 
 function api() {
@@ -55,6 +57,7 @@ export function ClubSettingsProvider({ children }: { children: React.ReactNode }
           rna: row.clubRna ?? "",
           stampUrl: row.clubStampUrl ?? null,
           signatureUrl: row.clubSignatureUrl ?? null,
+          signatoryRole: row.clubSignatoryRole ?? null,
         })
       }
       setLoaded(true)
@@ -83,6 +86,9 @@ export function ClubSettingsProvider({ children }: { children: React.ReactNode }
     }
     if (patch.signatureUrl !== undefined) {
       await electronApi.db.setSetting("clubSignatureUrl", patch.signatureUrl ?? "")
+    }
+    if (patch.signatoryRole !== undefined) {
+      await electronApi.db.setSetting("clubSignatoryRole", patch.signatoryRole ?? "")
     }
   }
 

@@ -74,6 +74,7 @@
     "mac": {
       "category": "public.app-category.finance",
       "icon": "build/icon.icns",
+      "identity": null,
       "target": [
         "dmg",
         "zip"
