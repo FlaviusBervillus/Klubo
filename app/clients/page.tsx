@@ -3,6 +3,7 @@
 import { AddClientDialog } from "@/components/clients/add-client-dialog"
 import { ClientsTable } from "@/components/clients/clients-table"
 import { ImportClientsExcelDialog } from "@/components/clients/import-clients-excel-dialog"
+import { SeasonRosterTools } from "@/components/clients/season-roster-tools"
 import { useTranslation } from "@/lib/i18n/context"
 
 export default function ClientsPage() {
@@ -18,6 +19,7 @@ export default function ClientsPage() {
           <p className="text-sm text-muted-foreground">{t.clients.subtitle}</p>
         </div>
         <div className="flex flex-wrap gap-2">
+          <SeasonRosterTools />
           <ImportClientsExcelDialog />
           <AddClientDialog />
         </div>

@@ -236,20 +236,12 @@ export function TransactionDetailView() {
               {t.transactionDetail.receipt}
             </CardTitle>
             <CardDescription>
-              {tx.justificatif
-                ? tx.justificatif.name
-                : t.transactionDetail.noReceipt}
+              {tx.justificatif ? tx.justificatif.name : t.transactionDetail.receiptPreviewHint}
             </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-1 flex-col gap-4">
             <div className="flex flex-1 items-center justify-center rounded-lg border border-dashed bg-muted/40 p-6">
-              {tx.justificatif ? (
-                <ReceiptPreview tx={tx} />
-              ) : (
-                <p className="text-sm text-muted-foreground">
-                  {t.transactionDetail.noReceipt}
-                </p>
-              )}
+              <ReceiptPreview tx={tx} />
             </div>
             <Button variant="outline" className="w-full" onClick={openReceiptPreview}>
               <DownloadIcon data-icon="inline-start" />

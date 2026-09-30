@@ -246,6 +246,24 @@ function applyImport(items, decisions) {
   let updated = 0
   let skipped = 0
 
+  // Un client importé doit apparaître dans l'effectif de la saison active (les saisons démarrent
+  // vides) : on l'y inscrit automatiquement s'il n'y est pas déjà, sans jamais toucher à celles où il l'est déjà.
+  const settings = db.getSettings()
+  const activeSeasonId = settings.activeSeasonId || null
+  const existingSeasonRoster = activeSeasonId ? db.getClientSeasonMap(activeSeasonId) : {}
+
+  function enrollInActiveSeasonIfNeeded(clientId, status) {
+    if (!activeSeasonId || clientId in existingSeasonRoster) return
+    db.setClientSeason(clientId, activeSeasonId, { status: status || "Non catégorisé", paid: false })
+    db.addImportBatchChange({
+      id: crypto.randomUUID(),
+      batchId,
+      clientId,
+      kind: "enroll",
+      previousJson: JSON.stringify({ seasonId: activeSeasonId }),
+    })
+  }
+
   for (const item of items) {
     const decision = decisions[item.rowIndex] || {}
     if (decision.proceed === false) {
@@ -257,6 +275,7 @@ function applyImport(items, decisions) {
       rowIndexToClientId[item.rowIndex] = item.matchedClientId
       const patch = item.patch || {}
       if (Object.keys(patch).length === 0) {
+        enrollInActiveSeasonIfNeeded(item.matchedClientId, item.existingSnapshot?.status)
         skipped++
         continue
       }
@@ -271,6 +290,7 @@ function applyImport(items, decisions) {
         kind: "update",
         previousJson: JSON.stringify(previous),
       })
+      enrollInActiveSeasonIfNeeded(item.matchedClientId, patch.status || before.status)
       updated++
     } else {
       const id = `import_${crypto.randomUUID()}`
@@ -290,6 +310,7 @@ function applyImport(items, decisions) {
         guardianId: null,
       })
       db.addImportBatchChange({ id: crypto.randomUUID(), batchId, clientId: id, kind: "create", previousJson: null })
+      enrollInActiveSeasonIfNeeded(id, item.courseType)
       rowIndexToClientId[item.rowIndex] = id
       created++
     }
@@ -331,6 +352,9 @@ function undoImport(batchId) {
     const change = changes[i]
     if (change.kind === "create") {
       db.deleteClient(change.client_id)
+    } else if (change.kind === "enroll") {
+      const previous = change.previous_json ? JSON.parse(change.previous_json) : {}
+      if (previous.seasonId) db.deleteClientSeason(change.client_id, previous.seasonId)
     } else {
       const previous = change.previous_json ? JSON.parse(change.previous_json) : {}
       if (Object.keys(previous).length > 0) db.updateClient(change.client_id, previous)

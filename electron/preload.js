@@ -42,6 +42,9 @@ contextBridge.exposeInMainWorld("electronAPI", {
     getClientSeasonMap: (seasonId) => ipcRenderer.invoke("db:getClientSeasonMap", seasonId),
     setClientSeason: (clientId, seasonId, payload) =>
       ipcRenderer.invoke("db:setClientSeason", clientId, seasonId, payload),
+    deleteClientSeason: (clientId, seasonId) =>
+      ipcRenderer.invoke("db:deleteClientSeason", clientId, seasonId),
+    resetSeasonClients: (seasonId) => ipcRenderer.invoke("db:resetSeasonClients", seasonId),
   },
   vault: {
     read: () => ipcRenderer.invoke("vault:read"),

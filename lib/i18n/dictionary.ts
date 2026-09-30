@@ -170,6 +170,7 @@ export interface Dictionary {
     none: string
     receipt: string
     noReceipt: string
+    receiptPreviewHint: string
     downloadReceipt: string
     stripeDetails: string
     grossAmount: string
@@ -381,6 +382,17 @@ export interface Dictionary {
     importBatchSummary: string
     guardianFieldLabel: string
     guardianFieldNone: string
+    seasonResetButton: string
+    seasonResetConfirmTitle: string
+    seasonResetConfirmDescription: string
+    seasonResetSuccess: string
+    bringForwardButton: string
+    bringForwardTitle: string
+    bringForwardDescription: string
+    bringForwardNoSeason: string
+    bringForwardEmpty: string
+    bringForwardConfirm: string
+    bringForwardSuccess: string
   }
   account: {
     trigger: string

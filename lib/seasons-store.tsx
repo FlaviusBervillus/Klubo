@@ -119,22 +119,34 @@ export function useSeasonTransactions() {
 }
 
 /**
- * Clients avec leur cours/statut de paiement propres à la saison active : la fiche client
- * (nom, email, adresse) reste commune à toutes les saisons, seuls "cours" et "payé" en sont
- * extraits ici, avec repli sur les valeurs de la fiche tant qu'aucune saison n'a de valeur
- * explicite pour ce client (ex. saisons créées avant l'ajout de cette fonctionnalité).
+ * Effectif de la saison active : un client n'apparaît que s'il a une ligne "client_seasons"
+ * pour cette saison (vraie appartenance, pas un simple surclassement) — une nouvelle saison
+ * démarre donc avec un effectif vide, volontairement, puisqu'on n'a pas forcément les mêmes
+ * adhérents chaque année. Sans saison active, on retombe sur la fiche globale de chaque client
+ * (comportement historique, aucun filtre). Les clients déjà inscrits une saison précédente
+ * peuvent être "repris" via `bringClientForward`.
  */
 export function useSeasonClients() {
   const { clients } = useClientsStore()
   const { activeSeasonId } = useSeasons()
   const [seasonMap, setSeasonMap] = useState<Record<string, { status: string; paid: boolean }>>({})
 
+  async function reloadSeasonMap() {
+    const electronApi = api()
+    if (!electronApi || !activeSeasonId) {
+      setSeasonMap({})
+      return
+    }
+    const map = await electronApi.db.getClientSeasonMap(activeSeasonId)
+    setSeasonMap(map)
+  }
+
   useEffect(() => {
     let cancelled = false
     async function load() {
       const electronApi = api()
       if (!electronApi || !activeSeasonId) {
-        setSeasonMap({})
+        if (!cancelled) setSeasonMap({})
         return
       }
       const map = await electronApi.db.getClientSeasonMap(activeSeasonId)
@@ -144,21 +156,56 @@ export function useSeasonClients() {
     return () => {
       cancelled = true
     }
-  }, [activeSeasonId, clients])
+  }, [activeSeasonId])
 
-  const seasonClients: Client[] = clients.map((c) => {
-    const override = seasonMap[c.id]
-    if (!override) return c
-    return { ...c, status: override.status as CourseType, paid: override.paid }
-  })
+  const seasonClients: Client[] = activeSeasonId
+    ? clients
+        .filter((c) => c.id in seasonMap)
+        .map((c) => ({ ...c, status: seasonMap[c.id].status as CourseType, paid: seasonMap[c.id].paid }))
+    : clients
 
   async function setClientSeasonInfo(clientId: string, payload: { status: CourseType; paid: boolean }) {
     const electronApi = api()
     if (!electronApi || !activeSeasonId) return
     await electronApi.db.setClientSeason(clientId, activeSeasonId, payload)
-    const map = await electronApi.db.getClientSeasonMap(activeSeasonId)
-    setSeasonMap(map)
+    await reloadSeasonMap()
   }
 
-  return { clients: seasonClients, setClientSeasonInfo, hasActiveSeason: !!activeSeasonId }
+  async function removeClientFromSeason(clientId: string) {
+    const electronApi = api()
+    if (!electronApi || !activeSeasonId) return
+    await electronApi.db.deleteClientSeason(clientId, activeSeasonId)
+    await reloadSeasonMap()
+  }
+
+  /** Vide entièrement l'effectif de la saison active (les fiches clients elles-mêmes ne sont pas supprimées). */
+  async function resetActiveSeasonClients() {
+    const electronApi = api()
+    if (!electronApi || !activeSeasonId) return
+    await electronApi.db.resetSeasonClients(activeSeasonId)
+    await reloadSeasonMap()
+  }
+
+  /** Effectif d'une AUTRE saison (ex. la précédente), pour proposer de reprendre un client déjà connu. */
+  async function getOtherSeasonRoster(seasonId: string) {
+    const electronApi = api()
+    if (!electronApi) return {}
+    return electronApi.db.getClientSeasonMap(seasonId)
+  }
+
+  /** Inscrit un client déjà connu (saison précédente) dans la saison active, en reprenant son
+   * cours d'alors comme point de départ ; le paiement repart à zéro (nouvelle saison, nouveau dû). */
+  async function bringClientForward(clientId: string, previousStatus: CourseType) {
+    await setClientSeasonInfo(clientId, { status: previousStatus, paid: false })
+  }
+
+  return {
+    clients: seasonClients,
+    setClientSeasonInfo,
+    removeClientFromSeason,
+    resetActiveSeasonClients,
+    getOtherSeasonRoster,
+    bringClientForward,
+    hasActiveSeason: !!activeSeasonId,
+  }
 }

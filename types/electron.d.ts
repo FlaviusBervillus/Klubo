@@ -177,6 +177,8 @@ declare global {
           seasonId: string,
           payload: { status: string; paid: boolean },
         ) => Promise<void>
+        deleteClientSeason: (clientId: string, seasonId: string) => Promise<void>
+        resetSeasonClients: (seasonId: string) => Promise<void>
       }
       vault: {
         read: () => Promise<VaultRow | null>

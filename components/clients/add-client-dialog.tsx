@@ -104,9 +104,18 @@ export function AddClientDialog({ client }: { client?: Client } = {}) {
         await updateClient(client.id, { status, paid })
       }
     } else {
-      // À la création, le cours/paiement saisis deviennent la valeur par défaut de la fiche,
-      // reprise pour la saison active tant qu'aucune valeur n'a été fixée explicitement pour elle.
-      await addClient({ ...form, guardianId: form.guardianId === "none" ? null : form.guardianId })
+      // À la création, le cours/paiement saisis deviennent la valeur par défaut de la fiche.
+      const newId = crypto.randomUUID()
+      await addClient({
+        id: newId,
+        ...form,
+        guardianId: form.guardianId === "none" ? null : form.guardianId,
+      })
+      // Un nouveau client rejoint aussitôt l'effectif de la saison active, sinon il n'apparaîtrait
+      // nulle part (les saisons démarrent volontairement avec un effectif vide).
+      if (hasActiveSeason) {
+        await setClientSeasonInfo(newId, { status: form.status, paid: form.paid })
+      }
       setForm(emptyForm)
     }
     setOpen(false)

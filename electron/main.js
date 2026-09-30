@@ -155,6 +155,8 @@ ipcMain.handle("db:getClientSeasonMap", (_e, seasonId) => db.getClientSeasonMap(
 ipcMain.handle("db:setClientSeason", (_e, clientId, seasonId, payload) =>
   db.setClientSeason(clientId, seasonId, payload),
 )
+ipcMain.handle("db:deleteClientSeason", (_e, clientId, seasonId) => db.deleteClientSeason(clientId, seasonId))
+ipcMain.handle("db:resetSeasonClients", (_e, seasonId) => db.resetSeasonClients(seasonId))
 
 ipcMain.handle("vault:read", () => db.getVault() ?? null)
 ipcMain.handle("vault:write", (_e, payload) => db.setVault(payload))

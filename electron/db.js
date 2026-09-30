@@ -136,6 +136,36 @@ function migrate(db) {
   // Facture réellement générée par Stripe (Stripe Invoicing) pour cette charge, quand elle existe :
   // on préfère toujours la vraie facture Stripe à celle que l'on génère nous-mêmes.
   ensureColumn(db, "transactions", "stripe_invoice_pdf_url", "stripe_invoice_pdf_url TEXT")
+
+  migrateSeasonMembershipBackfill(db)
+}
+
+/** Avant cette fonctionnalité, "client_seasons" ne servait qu'à surclasser cours/payé : une
+ * saison sans ligne explicite affichait quand même tous les clients (repli sur la fiche globale).
+ * On bascule désormais vers une vraie appartenance par saison (un client n'apparaît que s'il a une
+ * ligne "client_seasons"), donc pour ne pas vider d'un coup une saison déjà utilisée, on inscrit une
+ * fois pour toutes tous les clients actuels dans chaque saison existante qui n'a encore aucune ligne.
+ * Ne s'exécute qu'une seule fois (marqueur en base) : les saisons créées après ce passage démarrent
+ * volontairement avec un effectif vide, comme demandé. */
+function migrateSeasonMembershipBackfill(db) {
+  const already = db.prepare("SELECT value FROM settings WHERE key = 'seasonMembershipMigrated'").get()
+  if (already) return
+
+  const seasons = db.prepare("SELECT id FROM seasons").all()
+  const clients = db.prepare("SELECT id, status, paid FROM clients").all()
+  const insert = db.prepare(
+    `INSERT INTO client_seasons (client_id, season_id, status, paid)
+     VALUES (@clientId, @seasonId, @status, @paid)
+     ON CONFLICT(client_id, season_id) DO NOTHING`,
+  )
+  for (const season of seasons) {
+    const count = db.prepare("SELECT COUNT(*) AS n FROM client_seasons WHERE season_id = ?").get(season.id).n
+    if (count > 0) continue
+    for (const client of clients) {
+      insert.run({ clientId: client.id, seasonId: season.id, status: client.status, paid: client.paid })
+    }
+  }
+  db.prepare("INSERT INTO settings (key, value) VALUES ('seasonMembershipMigrated', '1')").run()
 }
 
 /** Ajoute une colonne à une table existante si elle n'y est pas déjà (les CREATE TABLE IF NOT EXISTS ci-dessus ne touchent pas les tables déjà créées lors d'une version antérieure). */
@@ -394,6 +424,7 @@ function updateClient(id, patch) {
 
 function deleteClient(id) {
   getDb().prepare("DELETE FROM clients WHERE id = ?").run(id)
+  getDb().prepare("DELETE FROM client_seasons WHERE client_id = ?").run(id)
 }
 
 /* ---------- Lots d'import (Excel clients) : traçabilité pour permettre l'annulation ---------- */
@@ -600,7 +631,9 @@ function deleteSeason(id) {
   getDb().prepare("DELETE FROM client_seasons WHERE season_id = ?").run(id)
 }
 
-/** Statut ("cours") + paiement d'un client pour une saison donnée, uniquement pour celles où ils ont été modifiés explicitement. */
+/** Statut ("cours") + paiement des clients INSCRITS à cette saison : une ligne "client_seasons"
+ * vaut à la fois appartenance (le client fait partie de l'effectif de la saison) et surclassement
+ * de son cours/paiement pour cette période. */
 function getClientSeasonMap(seasonId) {
   const rows = getDb()
     .prepare("SELECT client_id, status, paid FROM client_seasons WHERE season_id = ?")
@@ -615,6 +648,16 @@ function setClientSeason(clientId, seasonId, { status, paid }) {
        ON CONFLICT(client_id, season_id) DO UPDATE SET status = excluded.status, paid = excluded.paid`,
     )
     .run({ clientId, seasonId, status, paid: paid ? 1 : 0 })
+}
+
+/** Désinscrit un client d'une saison (la fiche client elle-même n'est jamais supprimée). */
+function deleteClientSeason(clientId, seasonId) {
+  getDb().prepare("DELETE FROM client_seasons WHERE client_id = ? AND season_id = ?").run(clientId, seasonId)
+}
+
+/** Vide l'effectif d'une saison (tous les clients désinscrits) sans supprimer la saison elle-même. */
+function resetSeasonClients(seasonId) {
+  getDb().prepare("DELETE FROM client_seasons WHERE season_id = ?").run(seasonId)
 }
 
 function getDbFilePath() {
@@ -674,4 +717,6 @@ module.exports = {
   deleteSeason,
   getClientSeasonMap,
   setClientSeason,
+  deleteClientSeason,
+  resetSeasonClients,
 }

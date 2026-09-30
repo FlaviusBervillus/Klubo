@@ -198,6 +198,7 @@ export const fr: Dictionary = {
     none: "Aucun",
     receipt: "Justificatif",
     noReceipt: "Aucun justificatif joint",
+    receiptPreviewHint: "Aperçu de la facture qui sera téléchargée",
     downloadReceipt: "Télécharger le justificatif",
     stripeDetails: "Détails de l'intégration Stripe",
     grossAmount: "Montant brut",
@@ -410,6 +411,19 @@ export const fr: Dictionary = {
     importBatchSummary: "{created} créé(s) · {updated} complété(s) · {linked} lié(s)",
     guardianFieldLabel: "Tuteur / parent lié",
     guardianFieldNone: "Aucun",
+    seasonResetButton: "Réinitialiser l'effectif",
+    seasonResetConfirmTitle: "Réinitialiser l'effectif de la saison ?",
+    seasonResetConfirmDescription:
+      "Tous les clients seront désinscrits de « {season} ». Leurs fiches ne sont pas supprimées et resteront disponibles pour être repris plus tard.",
+    seasonResetSuccess: "Effectif de la saison réinitialisé",
+    bringForwardButton: "Reprendre un client",
+    bringForwardTitle: "Reprendre des clients d'une saison précédente",
+    bringForwardDescription:
+      "Sélectionnez les clients à faire rejoindre la saison active, sans ressaisir leur fiche.",
+    bringForwardNoSeason: "Aucune autre saison disponible.",
+    bringForwardEmpty: "Tous les clients de cette saison sont déjà dans l'effectif actuel.",
+    bringForwardConfirm: "Ajouter à la saison active",
+    bringForwardSuccess: "{count} client(s) ajouté(s) à la saison active",
   },
   account: {
     trigger: "Mon compte",

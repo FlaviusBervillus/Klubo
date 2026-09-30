@@ -103,8 +103,8 @@ function renderInvoiceHtml(tx, club, client) {
   body { font-family: -apple-system, "Helvetica Neue", Arial, sans-serif; color: #1a1a1a; padding: 48px; font-size: 13px; }
   h1 { font-size: 26px; margin: 0 0 32px 0; }
   .top-row { display: flex; justify-content: space-between; align-items: flex-start; }
-  .meta-row { margin-bottom: 24px; }
-  .meta-label { font-weight: 600; }
+  .meta-grid { display: flex; flex-wrap: wrap; gap: 24px; margin-bottom: 24px; }
+  .meta-label { display: block; font-weight: 600; margin-bottom: 2px; }
   .columns { display: flex; justify-content: space-between; gap: 32px; margin-bottom: 24px; }
   .col { flex: 1; line-height: 1.5; }
   .club-name { font-weight: 600; }
@@ -134,8 +134,10 @@ function renderInvoiceHtml(tx, club, client) {
     ${club.logoUrl ? `<img class="logo" src="${club.logoUrl}" alt="" />` : ""}
   </div>
 
-  <div class="meta-row">
-    <span class="meta-label">Date de la facture</span> &nbsp; ${formatLongDate(tx.date)}
+  <div class="meta-grid">
+    <div><span class="meta-label">Date de la facture</span>${formatLongDate(tx.date)}</div>
+    <div><span class="meta-label">Catégorie</span>${escapeHtml(tx.category || "Non catégorisé")}</div>
+    <div><span class="meta-label">Moyen de paiement</span>${escapeHtml(paymentMethodLine(tx))}</div>
   </div>
 
   <div class="columns">
