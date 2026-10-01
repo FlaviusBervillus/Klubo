@@ -133,6 +133,20 @@ ipcMain.handle("clients:undo-import", (_e, batchId) => {
 
 ipcMain.handle("clients:list-import-batches", () => db.getImportBatches())
 
+ipcMain.handle("db:getFixedAssets", () => db.getFixedAssets())
+ipcMain.handle("db:createFixedAsset", (_e, asset) => {
+  db.createFixedAsset({ ...asset, id: asset.id || crypto.randomUUID() })
+})
+ipcMain.handle("db:updateFixedAsset", (_e, id, patch) => db.updateFixedAsset(id, patch))
+ipcMain.handle("db:deleteFixedAsset", (_e, id) => db.deleteFixedAsset(id))
+
+ipcMain.handle("db:getDebts", () => db.getDebts())
+ipcMain.handle("db:createDebt", (_e, debt) => {
+  db.createDebt({ ...debt, id: debt.id || crypto.randomUUID() })
+})
+ipcMain.handle("db:updateDebt", (_e, id, patch) => db.updateDebt(id, patch))
+ipcMain.handle("db:deleteDebt", (_e, id) => db.deleteDebt(id))
+
 ipcMain.handle("db:getTransactions", () => db.getTransactions())
 ipcMain.handle("db:createTransaction", (_e, tx) => {
   db.createTransaction({ ...tx, id: tx.id || crypto.randomUUID() })

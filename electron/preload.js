@@ -25,6 +25,16 @@ contextBridge.exposeInMainWorld("electronAPI", {
     undoImportBatch: (batchId) => ipcRenderer.invoke("clients:undo-import", batchId),
     listImportBatches: () => ipcRenderer.invoke("clients:list-import-batches"),
 
+    getFixedAssets: () => ipcRenderer.invoke("db:getFixedAssets"),
+    createFixedAsset: (asset) => ipcRenderer.invoke("db:createFixedAsset", asset),
+    updateFixedAsset: (id, patch) => ipcRenderer.invoke("db:updateFixedAsset", id, patch),
+    deleteFixedAsset: (id) => ipcRenderer.invoke("db:deleteFixedAsset", id),
+
+    getDebts: () => ipcRenderer.invoke("db:getDebts"),
+    createDebt: (debt) => ipcRenderer.invoke("db:createDebt", debt),
+    updateDebt: (id, patch) => ipcRenderer.invoke("db:updateDebt", id, patch),
+    deleteDebt: (id) => ipcRenderer.invoke("db:deleteDebt", id),
+
     getTransactions: () => ipcRenderer.invoke("db:getTransactions"),
     createTransaction: (tx) => ipcRenderer.invoke("db:createTransaction", tx),
     updateTransaction: (id, patch) => ipcRenderer.invoke("db:updateTransaction", id, patch),

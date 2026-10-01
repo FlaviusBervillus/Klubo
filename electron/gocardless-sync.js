@@ -75,7 +75,24 @@ async function fetchBalance(accountId, access) {
   }
 }
 
-/** À appeler après le retour de consentement : récupère les comptes, les transactions et le solde réels. */
+/** Libellé lisible d'un compte (ex. "Livret A", "Compte courant") : la banque ne renseigne pas
+ * toujours les mêmes champs, on tente le nom produit, puis le nom du titulaire, puis l'IBAN masqué. */
+async function fetchAccountLabel(accountId, access) {
+  try {
+    const data = await request("GET", `/api/v2/accounts/${accountId}/details/`, access)
+    const account = data.account || {}
+    if (account.product) return account.product
+    if (account.name) return account.name
+    if (account.iban) return `IBAN •••• ${String(account.iban).slice(-4)}`
+  } catch {
+    // Pas grave : certaines banques ne renseignent pas cet endpoint, on retombe sur l'id du compte.
+  }
+  return `Compte ${accountId.slice(0, 8)}`
+}
+
+/** À appeler après le retour de consentement : récupère les comptes, les transactions et le solde réels.
+ * Une requisition peut couvrir plusieurs comptes chez la même banque (ex. compte courant + Livret A) :
+ * chacun est synchronisé séparément et son solde conservé individuellement. */
 async function completeSync(secretId, secretKey, requisitionId) {
   const access = await getAccessToken(secretId, secretKey)
   const requisition = await request("GET", `/api/v2/requisitions/${requisitionId}/`, access)
@@ -83,6 +100,7 @@ async function completeSync(secretId, secretKey, requisitionId) {
   let total = 0
   let balanceTotal = 0
   let balanceCurrency = null
+  const perAccountBalances = []
   for (const accountId of requisition.accounts || []) {
     const tx = await request("GET", `/api/v2/accounts/${accountId}/transactions/`, access)
     const booked = tx.transactions?.booked || []
@@ -101,19 +119,18 @@ async function completeSync(secretId, secretKey, requisitionId) {
     if (balance) {
       balanceTotal += balance.amount
       balanceCurrency = balance.currency
+      const label = await fetchAccountLabel(accountId, access)
+      perAccountBalances.push({ accountId, label, amount: balance.amount, currency: balance.currency })
     }
   }
   db.setSyncState("gocardless", new Date().toISOString())
+  const updatedAt = new Date().toISOString()
   if (balanceCurrency) {
-    db.setSetting(
-      "gocardlessBalance",
-      JSON.stringify({
-        amount: balanceTotal,
-        currency: balanceCurrency,
-        updatedAt: new Date().toISOString(),
-      }),
-    )
+    // Solde agrégé, conservé pour les cartes du dashboard/rapport qui n'affichent qu'un seul total.
+    db.setSetting("gocardlessBalance", JSON.stringify({ amount: balanceTotal, currency: balanceCurrency, updatedAt }))
   }
+  // Détail par compte (ex. Livret A séparé du compte courant), pour le bilan détaillé.
+  db.setSetting("gocardlessBalances", JSON.stringify({ accounts: perAccountBalances, updatedAt }))
   return total
 }
 

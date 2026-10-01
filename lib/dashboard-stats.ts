@@ -127,3 +127,72 @@ export function computeCategoryPivot(
   }))
   return { months, rows }
 }
+
+function localDateStr(dateIso: string) {
+  const d = new Date(dateIso)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`
+}
+
+/** Produits/charges de l'exercice (= saison, ou tout l'historique si aucune saison n'est
+ * sélectionnée) : les frais Stripe sont comptés comme une charge ("Frais bancaires"), jamais
+ * déduits des recettes, pour que le total des produits corresponde à ce que les adhérents ont
+ * réellement payé. */
+export function computeResultExercice(transactions: Transaction[]) {
+  let produits = 0
+  let charges = 0
+  for (const tx of transactions) {
+    if (tx.status === "echec") continue
+    if (tx.type === "entree") {
+      produits += tx.amount
+      if (tx.stripe?.fee) charges += tx.stripe.fee
+    } else {
+      charges += tx.amount
+    }
+  }
+  return { produits, charges, resultat: produits - charges }
+}
+
+/** Répartition produits/charges par catégorie sur l'exercice entier, sans découpage mensuel
+ * (version "compte de résultat détaillé" de computeCategoryPivot, un seul total par catégorie). */
+export function computeCategoryTotals(transactions: Transaction[], type: TransactionType) {
+  const totals = new Map<string, number>()
+  function addTo(category: string, amount: number) {
+    totals.set(category, (totals.get(category) ?? 0) + amount)
+  }
+  for (const tx of transactions) {
+    if (tx.type !== type || tx.status === "echec") continue
+    addTo(tx.category, tx.amount)
+  }
+  if (type === "sortie") {
+    for (const tx of transactions) {
+      if (tx.type !== "entree" || tx.status === "echec" || !tx.stripe?.fee) continue
+      addTo("Frais bancaires", tx.stripe.fee)
+    }
+  }
+  return Array.from(totals.entries())
+    .map(([category, amount]) => ({ category, amount }))
+    .sort((a, b) => b.amount - a.amount)
+}
+
+/** Trésorerie disponible, répartie entre caisse (espèces non déposées) et banque (tout le reste :
+ * virements, chèques, carte — on suppose que ces montants sont déjà sur le compte du club). */
+export function computeCaisseBanque(transactions: Transaction[]) {
+  let caisse = 0
+  let banque = 0
+  for (const tx of transactions) {
+    if (tx.status === "echec") continue
+    const value = tx.stripe ? tx.stripe.net : tx.amount
+    const signed = tx.type === "entree" ? value : -value
+    if (tx.method === "especes") caisse += signed
+    else banque += signed
+  }
+  return { caisse, banque, total: caisse + banque }
+}
+
+/** Solde cumulé de tout ce qui précède le début de la saison (report des exercices antérieurs) :
+ * même logique de date locale que isDateInSeason (lib/seasons-store.tsx), pour rester cohérent
+ * avec le filtrage utilisé partout ailleurs. */
+export function computeReportANouveau(allTransactions: Transaction[], seasonStartDate: string) {
+  const before = allTransactions.filter((tx) => localDateStr(tx.date) < seasonStartDate)
+  return computeAccountBalance(before)
+}

@@ -1,6 +1,8 @@
 "use client"
 
+import { AccountingReport } from "@/components/rapports/accounting-report"
 import { FinancialReport } from "@/components/rapports/financial-report"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useTranslation } from "@/lib/i18n/context"
 
 export default function RapportsPage() {
@@ -15,7 +17,18 @@ export default function RapportsPage() {
         <p className="text-sm text-muted-foreground">{t.reports.subtitle}</p>
       </div>
 
-      <FinancialReport />
+      <Tabs defaultValue="overview">
+        <TabsList>
+          <TabsTrigger value="overview">{t.reports.tabOverview}</TabsTrigger>
+          <TabsTrigger value="accounting">{t.reports.tabAccounting}</TabsTrigger>
+        </TabsList>
+        <TabsContent value="overview">
+          <FinancialReport />
+        </TabsContent>
+        <TabsContent value="accounting">
+          <AccountingReport />
+        </TabsContent>
+      </Tabs>
     </div>
   )
 }

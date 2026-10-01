@@ -78,6 +78,26 @@ export interface ImportBatch {
   created_at: string
 }
 
+export interface DbFixedAsset {
+  id: string
+  label: string
+  purchase_amount: number
+  purchase_date: string
+  depreciation_years: number
+  disposed: number
+  notes: string
+}
+
+export interface DbDebt {
+  id: string
+  label: string
+  amount: number
+  date: string
+  due_date: string | null
+  settled: number
+  notes: string
+}
+
 export interface DbTransaction {
   id: string
   date: string
@@ -149,6 +169,16 @@ declare global {
         >
         undoImportBatch: (batchId: string) => Promise<{ ok: true } | { ok: false; error?: string }>
         listImportBatches: () => Promise<ImportBatch[]>
+
+        getFixedAssets: () => Promise<DbFixedAsset[]>
+        createFixedAsset: (asset: Record<string, unknown>) => Promise<void>
+        updateFixedAsset: (id: string, patch: Record<string, unknown>) => Promise<void>
+        deleteFixedAsset: (id: string) => Promise<void>
+
+        getDebts: () => Promise<DbDebt[]>
+        createDebt: (debt: Record<string, unknown>) => Promise<void>
+        updateDebt: (id: string, patch: Record<string, unknown>) => Promise<void>
+        deleteDebt: (id: string) => Promise<void>
 
         getTransactions: () => Promise<DbTransaction[]>
         createTransaction: (tx: Record<string, unknown>) => Promise<void>

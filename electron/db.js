@@ -125,6 +125,28 @@ function migrate(db) {
       kind TEXT NOT NULL,
       previous_json TEXT
     );
+
+    CREATE TABLE IF NOT EXISTS fixed_assets (
+      id TEXT PRIMARY KEY,
+      label TEXT NOT NULL,
+      purchase_amount REAL NOT NULL,
+      purchase_date TEXT NOT NULL,
+      depreciation_years INTEGER NOT NULL,
+      disposed INTEGER NOT NULL DEFAULT 0,
+      notes TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS debts (
+      id TEXT PRIMARY KEY,
+      label TEXT NOT NULL,
+      amount REAL NOT NULL,
+      date TEXT NOT NULL,
+      due_date TEXT,
+      settled INTEGER NOT NULL DEFAULT 0,
+      notes TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
   `)
 
   ensureColumn(db, "clients", "address", "address TEXT NOT NULL DEFAULT ''")
@@ -715,6 +737,91 @@ function resetSeasonClients(seasonId) {
   getDb().prepare("DELETE FROM client_seasons WHERE season_id = ?").run(seasonId)
 }
 
+/* ---------- Immobilisations (matériel à amortir) ---------- */
+function getFixedAssets() {
+  return getDb().prepare("SELECT * FROM fixed_assets ORDER BY purchase_date DESC").all()
+}
+
+function createFixedAsset(asset) {
+  getDb()
+    .prepare(
+      `INSERT INTO fixed_assets (id, label, purchase_amount, purchase_date, depreciation_years, disposed, notes)
+       VALUES (@id, @label, @purchaseAmount, @purchaseDate, @depreciationYears, @disposed, @notes)`,
+    )
+    .run({
+      ...asset,
+      disposed: asset.disposed ? 1 : 0,
+      notes: asset.notes ?? "",
+    })
+}
+
+function updateFixedAsset(id, patch) {
+  const fields = []
+  const params = { id }
+  for (const [key, column] of [
+    ["label", "label"],
+    ["purchaseAmount", "purchase_amount"],
+    ["purchaseDate", "purchase_date"],
+    ["depreciationYears", "depreciation_years"],
+    ["disposed", "disposed"],
+    ["notes", "notes"],
+  ]) {
+    if (patch[key] !== undefined) {
+      fields.push(`${column} = @${key}`)
+      params[key] = key === "disposed" ? (patch[key] ? 1 : 0) : patch[key]
+    }
+  }
+  if (fields.length === 0) return
+  getDb().prepare(`UPDATE fixed_assets SET ${fields.join(", ")} WHERE id = @id`).run(params)
+}
+
+function deleteFixedAsset(id) {
+  getDb().prepare("DELETE FROM fixed_assets WHERE id = ?").run(id)
+}
+
+/* ---------- Dettes ---------- */
+function getDebts() {
+  return getDb().prepare("SELECT * FROM debts ORDER BY date DESC").all()
+}
+
+function createDebt(debt) {
+  getDb()
+    .prepare(
+      `INSERT INTO debts (id, label, amount, date, due_date, settled, notes)
+       VALUES (@id, @label, @amount, @date, @dueDate, @settled, @notes)`,
+    )
+    .run({
+      ...debt,
+      dueDate: debt.dueDate ?? null,
+      settled: debt.settled ? 1 : 0,
+      notes: debt.notes ?? "",
+    })
+}
+
+function updateDebt(id, patch) {
+  const fields = []
+  const params = { id }
+  for (const [key, column] of [
+    ["label", "label"],
+    ["amount", "amount"],
+    ["date", "date"],
+    ["dueDate", "due_date"],
+    ["settled", "settled"],
+    ["notes", "notes"],
+  ]) {
+    if (patch[key] !== undefined) {
+      fields.push(`${column} = @${key}`)
+      params[key] = key === "settled" ? (patch[key] ? 1 : 0) : patch[key]
+    }
+  }
+  if (fields.length === 0) return
+  getDb().prepare(`UPDATE debts SET ${fields.join(", ")} WHERE id = @id`).run(params)
+}
+
+function deleteDebt(id) {
+  getDb().prepare("DELETE FROM debts WHERE id = ?").run(id)
+}
+
 function getDbFilePath() {
   return path.join(app.getPath("userData"), "compta.sqlite3")
 }
@@ -752,6 +859,14 @@ module.exports = {
   getImportBatches,
   getImportBatchChanges,
   markImportBatchUndone,
+  getFixedAssets,
+  createFixedAsset,
+  updateFixedAsset,
+  deleteFixedAsset,
+  getDebts,
+  createDebt,
+  updateDebt,
+  deleteDebt,
   getTransactions,
   getTransactionById,
   createTransaction,

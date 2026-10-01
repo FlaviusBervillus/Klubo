@@ -209,6 +209,71 @@ export interface Dictionary {
     downloadedSuffix: string
     printPreviewTitle: string
     printPreviewHint: string
+    tabOverview: string
+    tabAccounting: string
+  }
+  accounting: {
+    disclaimer: string
+    periodLabel: string
+    compteResultatTitle: string
+    compteResultatSubtitle: string
+    compteResultatDetailTitle: string
+    compteResultatDetailSubtitle: string
+    produits: string
+    charges: string
+    resultatExercice: string
+    totalProduits: string
+    totalCharges: string
+    bilanTitle: string
+    bilanSubtitle: string
+    bilanDetailTitle: string
+    bilanDetailSubtitle: string
+    actif: string
+    passif: string
+    totalActif: string
+    totalPassif: string
+    disponibilites: string
+    caisse: string
+    banque: string
+    reportANouveau: string
+    resultatExerciceLine: string
+    balanceOk: string
+    balanceGap: string
+    noCategoryData: string
+    print: string
+    immobilisationsNettes: string
+    dettes: string
+    dotationLabel: string
+    dotationIncluded: string
+    bankLive: string
+    bankEstimated: string
+    manageAssets: string
+    manageAssetsTitle: string
+    manageAssetsDescription: string
+    assetLabel: string
+    assetLabelPlaceholder: string
+    assetAmount: string
+    assetPurchaseDate: string
+    assetDepreciationYears: string
+    assetDisposed: string
+    assetAdd: string
+    assetDelete: string
+    assetNetValue: string
+    assetSaved: string
+    noAssets: string
+    manageDebts: string
+    manageDebtsTitle: string
+    manageDebtsDescription: string
+    debtLabel: string
+    debtLabelPlaceholder: string
+    debtAmount: string
+    debtDate: string
+    debtDueDate: string
+    debtSettled: string
+    debtAdd: string
+    debtDelete: string
+    debtSaved: string
+    noDebts: string
   }
   settings: {
     title: string
