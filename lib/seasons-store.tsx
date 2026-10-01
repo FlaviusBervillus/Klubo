@@ -31,6 +31,8 @@ const SeasonsContext = createContext<{
   loaded: boolean
   setActiveSeasonId: (id: string) => Promise<void>
   createSeason: (input: { label: string; startDate: string; endDate: string }) => Promise<void>
+  updateSeason: (id: string, patch: Partial<{ label: string; startDate: string; endDate: string }>) => Promise<void>
+  deleteSeason: (id: string) => Promise<void>
 } | null>(null)
 
 export function SeasonsProvider({ children }: { children: React.ReactNode }) {
@@ -78,11 +80,41 @@ export function SeasonsProvider({ children }: { children: React.ReactNode }) {
     await refresh()
   }
 
+  async function updateSeason(
+    id: string,
+    patch: Partial<{ label: string; startDate: string; endDate: string }>,
+  ) {
+    const electronApi = api()
+    if (!electronApi) return
+    await electronApi.db.updateSeason(id, patch)
+    await refresh()
+  }
+
+  async function deleteSeason(id: string) {
+    const electronApi = api()
+    if (!electronApi) return
+    await electronApi.db.deleteSeason(id)
+    if (activeSeasonId === id) {
+      const remaining = seasons.filter((s) => s.id !== id)
+      await setActiveSeasonId(remaining[0]?.id ?? "")
+    }
+    await refresh()
+  }
+
   const activeSeason = seasons.find((s) => s.id === activeSeasonId) ?? null
 
   return (
     <SeasonsContext.Provider
-      value={{ seasons, activeSeasonId, activeSeason, loaded, setActiveSeasonId, createSeason }}
+      value={{
+        seasons,
+        activeSeasonId,
+        activeSeason,
+        loaded,
+        setActiveSeasonId,
+        createSeason,
+        updateSeason,
+        deleteSeason,
+      }}
     >
       {children}
     </SeasonsContext.Provider>

@@ -518,6 +518,13 @@ export interface Dictionary {
     new: string
     newTitle: string
     newSubtitle: string
+    edit: string
+    editTitle: string
+    editSubtitle: string
+    updated: string
+    delete: string
+    deleteConfirm: string
+    deleted: string
     label: string
     start: string
     end: string
