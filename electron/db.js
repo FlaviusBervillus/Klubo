@@ -266,9 +266,22 @@ function getClientById(id) {
   return getDb().prepare("SELECT * FROM clients WHERE id = ?").get(id) ?? null
 }
 
+/** Inscrit un client dans la saison active s'il n'y est pas déjà (les saisons démarrent vides,
+ * donc tout client créé/retrouvé par une synchro doit explicitement les rejoindre pour être
+ * visible) ; sans saison active, ne fait rien (comportement historique, aucun filtre). */
+function enrollInActiveSeasonIfNeeded(clientId, status) {
+  const activeSeasonId = getSettings().activeSeasonId
+  if (!activeSeasonId) return
+  const already = getDb()
+    .prepare("SELECT 1 FROM client_seasons WHERE client_id = @clientId AND season_id = @activeSeasonId")
+    .get({ clientId, activeSeasonId })
+  if (already) return
+  setClientSeason(clientId, activeSeasonId, { status: status || "Non catégorisé", paid: false })
+}
+
 function upsertClientByStripeId(client) {
   const existing = getDb()
-    .prepare("SELECT id FROM clients WHERE stripe_customer_id = ?")
+    .prepare("SELECT id, status FROM clients WHERE stripe_customer_id = ?")
     .get(client.stripeCustomerId)
   if (existing) {
     getDb()
@@ -277,13 +290,16 @@ function upsertClientByStripeId(client) {
          WHERE stripe_customer_id=@stripeCustomerId`,
       )
       .run(client)
+    enrollInActiveSeasonIfNeeded(existing.id, existing.status)
   } else {
+    const id = `stripe_${client.stripeCustomerId}`
     createClient({
-      id: `stripe_${client.stripeCustomerId}`,
+      id,
       status: "Non catégorisé",
       paid: true,
       ...client,
     })
+    enrollInActiveSeasonIfNeeded(id, client.status || "Non catégorisé")
   }
 }
 
@@ -369,6 +385,22 @@ function applyDetectedCourseType({ stripeCustomerId, email, firstName, lastName,
     : findGuestClient({ email, firstName, lastName })
   if (!row || row.status !== "Non catégorisé") return
   getDb().prepare("UPDATE clients SET status = @status WHERE id = @id").run({ status: courseType, id: row.id })
+
+  // Si ce client est déjà inscrit à la saison active avec un cours encore indéterminé, on
+  // répercute le cours détecté sur son inscription (sinon la page Clients resterait figée
+  // sur "Non catégorisé" malgré la mise à jour de sa fiche globale ci-dessus).
+  const activeSeasonId = getSettings().activeSeasonId
+  if (!activeSeasonId) return
+  const seasonRow = getDb()
+    .prepare("SELECT status FROM client_seasons WHERE client_id = @id AND season_id = @activeSeasonId")
+    .get({ id: row.id, activeSeasonId })
+  if (seasonRow && seasonRow.status === "Non catégorisé") {
+    getDb()
+      .prepare(
+        "UPDATE client_seasons SET status = @status WHERE client_id = @id AND season_id = @activeSeasonId",
+      )
+      .run({ status: courseType, id: row.id, activeSeasonId })
+  }
 }
 
 /** Clients Stripe "invités" (paiement sans compte Stripe) : pas d'id client Stripe, dédupliqués par email, ou par nom si aucun email n'est fourni par Stripe. */
@@ -385,14 +417,17 @@ function upsertGuestClient(client) {
         method: client.method,
         id: existing.id,
       })
+    enrollInActiveSeasonIfNeeded(existing.id, existing.status)
   } else {
+    const id = `guest_${crypto.randomUUID()}`
     createClient({
-      id: `guest_${crypto.randomUUID()}`,
+      id,
       status: "Non catégorisé",
       paid: true,
       ...client,
       email: client.email || "",
     })
+    enrollInActiveSeasonIfNeeded(id, "Non catégorisé")
   }
 }
 
@@ -504,10 +539,30 @@ function upsertTransactionById(tx) {
 
 function upsertTransactionByChargeId(tx) {
   const existing = getDb()
-    .prepare("SELECT id, category, status FROM transactions WHERE stripe_charge_id = ?")
+    .prepare("SELECT id FROM transactions WHERE stripe_charge_id = ?")
     .get(tx.stripeChargeId)
   if (existing) {
-    // Ne jamais écraser une catégorisation ou un statut déjà validé manuellement.
+    // On rafraîchit les champs purement issus de Stripe à chaque resynchro (ex. une description
+    // modifiée depuis le Dashboard Stripe après coup, ou le payload brut dont dépend l'affichage
+    // des remboursements) — mais jamais la catégorie, le statut ou l'adhérent lié : ce sont des
+    // choix du trésorier, une resynchro ne doit jamais les écraser.
+    getDb()
+      .prepare(
+        `UPDATE transactions
+         SET description = @description, amount = @amount, stripe_fee = @stripeFee,
+             stripe_net = @stripeNet, stripe_payment_intent_id = @stripePaymentIntentId,
+             stripe_raw_json = @stripeRawJson
+         WHERE id = @id`,
+      )
+      .run({
+        id: existing.id,
+        description: tx.description,
+        amount: tx.amount,
+        stripeFee: tx.stripeFee ?? null,
+        stripeNet: tx.stripeNet ?? null,
+        stripePaymentIntentId: tx.stripePaymentIntentId ?? null,
+        stripeRawJson: tx.stripeRawJson ?? null,
+      })
     return
   }
   createTransaction(tx)
