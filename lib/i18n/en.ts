@@ -335,6 +335,16 @@ export const en: Dictionary = {
     megaListError: "Could not list Mega backups",
     selectBackupToRestore: "Choose a backup to restore",
     noBackupsFound: "No backups found on Mega.",
+    dangerZoneTitle: "Danger zone",
+    dangerZoneSubtitle:
+      "Permanently deletes all local data (transactions, clients, settings, vault) and relaunches the app as a fresh install.",
+    resetAppButton: "Reset the application",
+    resetAppConfirmTitle: "Delete all data?",
+    resetAppConfirmDescription:
+      "Irreversible. All transactions, client records, seasons, API keys and saved credentials will be permanently lost. Consider making a Mega backup first if needed.",
+    resetAppConfirmLabel: "Type “{word}” to confirm",
+    resetAppConfirmHint: "The app will close and relaunch automatically, empty.",
+    resetAppInProgress: "Deleting…",
     credentialsSavedTitle: "Credentials saved",
     credentialsSavedDescription: "Encrypted in the local vault.",
     stripeKeysDialogTitle: "Stripe Connect API keys",

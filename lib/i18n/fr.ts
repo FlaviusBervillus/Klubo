@@ -335,6 +335,16 @@ export const fr: Dictionary = {
     megaListError: "Impossible de lister les sauvegardes Mega",
     selectBackupToRestore: "Choisir une sauvegarde à restaurer",
     noBackupsFound: "Aucune sauvegarde trouvée sur Mega.",
+    dangerZoneTitle: "Zone dangereuse",
+    dangerZoneSubtitle:
+      "Supprime définitivement toutes les données locales (transactions, clients, paramètres, coffre-fort) et relance l'app à l'état d'une installation neuve.",
+    resetAppButton: "Réinitialiser l'application",
+    resetAppConfirmTitle: "Supprimer toutes les données ?",
+    resetAppConfirmDescription:
+      "Irréversible. Toutes les transactions, fiches clients, saisons, clés API et identifiants enregistrés seront définitivement perdus. Pensez à faire une sauvegarde Mega avant si besoin.",
+    resetAppConfirmLabel: "Tapez « {word} » pour confirmer",
+    resetAppConfirmHint: "L'application va se fermer puis relancer automatiquement, vide.",
+    resetAppInProgress: "Suppression en cours…",
     credentialsSavedTitle: "Identifiants enregistrés",
     credentialsSavedDescription: "Chiffrés dans le coffre-fort local.",
     stripeKeysDialogTitle: "Clés API Stripe Connect",

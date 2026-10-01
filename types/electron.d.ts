@@ -184,6 +184,7 @@ declare global {
         read: () => Promise<VaultRow | null>
         write: (payload: VaultRow) => Promise<void>
       }
+      resetAppData: () => Promise<void>
       prepareReceipt: (transactionId: string) => Promise<
         | {
             ok: true

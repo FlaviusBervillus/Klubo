@@ -50,6 +50,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
     read: () => ipcRenderer.invoke("vault:read"),
     write: (payload) => ipcRenderer.invoke("vault:write", payload),
   },
+  resetAppData: () => ipcRenderer.invoke("app:reset-data"),
   prepareReceipt: (transactionId) => ipcRenderer.invoke("receipts:prepare", transactionId),
   renderReceiptPreview: (transactionId, overrides) =>
     ipcRenderer.invoke("receipts:render-preview", transactionId, overrides),

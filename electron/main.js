@@ -161,6 +161,21 @@ ipcMain.handle("db:resetSeasonClients", (_e, seasonId) => db.resetSeasonClients(
 ipcMain.handle("vault:read", () => db.getVault() ?? null)
 ipcMain.handle("vault:write", (_e, payload) => db.setVault(payload))
 
+/** Supprime TOUTES les données locales (transactions, clients, paramètres, coffre-fort chiffré —
+ * tout vit dans l'unique fichier SQLite) puis relance l'app : équivalent d'une désinstallation
+ * complète suivie d'une réinstallation propre, sans dépendre d'un hook de désinstallation système
+ * (macOS n'en fournit aucun pour un simple glisser-déposer vers la Corbeille). */
+ipcMain.handle("app:reset-data", () => {
+  const dbPath = db.getDbFilePath()
+  db.closeDb()
+  for (const suffix of ["", "-wal", "-shm"]) {
+    const filePath = dbPath + suffix
+    if (fs.existsSync(filePath)) fs.unlinkSync(filePath)
+  }
+  app.relaunch()
+  app.exit(0)
+})
+
 /* ---------- IPC : justificatifs de paiement (PDF) ---------- */
 
 function getClubSettings() {

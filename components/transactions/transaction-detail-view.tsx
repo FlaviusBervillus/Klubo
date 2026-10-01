@@ -432,7 +432,9 @@ function ReceiptDocument({
         </div>
         <div className="flex items-center justify-between gap-4">
           <dt className="text-muted-foreground">{t.transactionDetail.reference}</dt>
-          <dd>{tx.id}</dd>
+          <dd className="max-w-40 truncate text-right" title={tx.id}>
+            {tx.id}
+          </dd>
         </div>
         <div className="flex items-center justify-between gap-4">
           <dt className="text-muted-foreground">{t.transactionDetail.reason}</dt>

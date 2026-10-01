@@ -7,6 +7,7 @@ import { ClubIdentityCard } from "@/components/parametres/club-identity-card"
 import { StripeConnectCard } from "@/components/parametres/stripe-connect-card"
 import { GoCardlessCard } from "@/components/parametres/gocardless-card"
 import { BackupCard } from "@/components/parametres/backup-card"
+import { DangerZoneCard } from "@/components/parametres/danger-zone-card"
 import { VaultGate } from "@/components/parametres/vault-gate"
 import { Button } from "@/components/ui/button"
 import {
@@ -70,6 +71,8 @@ export default function ParametresPage() {
           <BackupCard />
         </div>
       </VaultGate>
+
+      {session.role === "admin" ? <DangerZoneCard /> : null}
     </div>
   )
 }

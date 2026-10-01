@@ -307,6 +307,14 @@ export interface Dictionary {
     megaListError: string
     selectBackupToRestore: string
     noBackupsFound: string
+    dangerZoneTitle: string
+    dangerZoneSubtitle: string
+    resetAppButton: string
+    resetAppConfirmTitle: string
+    resetAppConfirmDescription: string
+    resetAppConfirmLabel: string
+    resetAppConfirmHint: string
+    resetAppInProgress: string
     credentialsSavedTitle: string
     credentialsSavedDescription: string
     stripeKeysDialogTitle: string
