@@ -167,6 +167,7 @@ export interface Dictionary {
     category: string
     method: string
     linkedMember: string
+    guardianHint: string
     none: string
     receipt: string
     noReceipt: string
@@ -427,6 +428,13 @@ export interface Dictionary {
     allPaymentStatuses: string
     noResults: string
     resultsCount: string
+    markedPaid: string
+    markedUnpaid: string
+    paymentEvidenceTitle: string
+    paymentEvidenceEmpty: string
+    paymentEvidenceViaGuardian: string
+    markPaid: string
+    markUnpaid: string
     importExcel: string
     importing: string
     importSuccessTitle: string

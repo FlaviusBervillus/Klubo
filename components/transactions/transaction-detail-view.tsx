@@ -54,6 +54,7 @@ import { Input } from "@/components/ui/input"
 import { MethodBadge, StatusBadge, Amount } from "@/components/finance-badges"
 import { ReceiptPreviewDialog } from "@/components/transactions/receipt-preview-dialog"
 import { useClientsStore } from "@/lib/clients-store"
+import { clientFullName, findLinkedChildren, normalizeClientName } from "@/lib/client-payments"
 import { useClubSettings } from "@/lib/club-settings"
 import { useTranslation } from "@/lib/i18n/context"
 import {
@@ -114,6 +115,17 @@ export function TransactionDetailView() {
     value: c,
     label: t.categories[c],
   }))
+
+  // Cas fréquent : un parent règle la cotisation de son enfant, la transaction reste à son nom —
+  // on le détecte pour proposer de réattribuer directement à l'enfant inscrit.
+  const matchedGuardian = tx.member
+    ? clients.find((c) => normalizeClientName(clientFullName(c)) === normalizeClientName(tx.member!))
+    : undefined
+  const linkedChildren = matchedGuardian ? findLinkedChildren(matchedGuardian, clients) : []
+
+  function reassignToChild(childName: string) {
+    updateMemberInStore(txId, childName)
+  }
 
   return (
     <div className="mx-auto flex w-full max-w-4xl flex-col gap-6">
@@ -209,7 +221,7 @@ export function TransactionDetailView() {
             <Separator />
             <MetaRow icon={UserIcon} label={t.transactionDetail.linkedMember}>
               <Input
-                key={tx.id}
+                key={`${tx.id}-${tx.member ?? ""}`}
                 list="linked-member-suggestions"
                 defaultValue={tx.member ?? ""}
                 placeholder={t.transactionDetail.none}
@@ -227,6 +239,25 @@ export function TransactionDetailView() {
                 ))}
               </datalist>
             </MetaRow>
+            {linkedChildren.length > 0 ? (
+              <div className="flex flex-wrap items-center gap-1.5 px-1 pt-2 pb-1">
+                <span className="text-xs text-muted-foreground">
+                  {t.transactionDetail.guardianHint}
+                </span>
+                {linkedChildren.map((child) => (
+                  <Button
+                    key={child.id}
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-6 px-2 text-xs"
+                    onClick={() => reassignToChild(clientFullName(child))}
+                  >
+                    {clientFullName(child)}
+                  </Button>
+                ))}
+              </div>
+            ) : null}
           </CardContent>
         </Card>
 

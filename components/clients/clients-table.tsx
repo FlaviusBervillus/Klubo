@@ -1,10 +1,19 @@
 "use client"
 
 import { useMemo, useState } from "react"
-import { SearchIcon } from "lucide-react"
+import { CircleAlertIcon, SearchIcon } from "lucide-react"
+import { toast } from "sonner"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import {
   InputGroup,
   InputGroupAddon,
@@ -29,9 +38,10 @@ import {
 import { Empty } from "@/components/ui/empty"
 import { MethodBadge } from "@/components/finance-badges"
 import { AddClientDialog } from "@/components/clients/add-client-dialog"
-import { useSeasonClients } from "@/lib/seasons-store"
+import { clientFullName, findClientPayments } from "@/lib/client-payments"
+import { formatDate, formatEuro, ALL_COURSE_TYPES, type CourseType } from "@/lib/mock-data"
+import { useSeasonClients, useSeasonTransactions } from "@/lib/seasons-store"
 import { useTranslation } from "@/lib/i18n/context"
-import { ALL_COURSE_TYPES, type CourseType } from "@/lib/mock-data"
 
 const statusStyles: Record<CourseType, string> = {
   "Kung-fu Adulte":
@@ -50,7 +60,8 @@ const statusStyles: Record<CourseType, string> = {
 
 export function ClientsTable() {
   const { t } = useTranslation()
-  const { clients } = useSeasonClients()
+  const { clients, setClientSeasonInfo } = useSeasonClients()
+  const seasonTransactions = useSeasonTransactions()
   const [query, setQuery] = useState("")
   const [status, setStatus] = useState("all")
   const [paymentStatus, setPaymentStatus] = useState("all")
@@ -88,6 +99,13 @@ export function ClientsTable() {
     setQuery("")
     setStatus("all")
     setPaymentStatus("all")
+  }
+
+  const clientsById = useMemo(() => new Map(clients.map((c) => [c.id, c])), [clients])
+
+  async function setPaid(clientId: string, clientStatus: CourseType, paid: boolean) {
+    await setClientSeasonInfo(clientId, { status: clientStatus, paid })
+    toast.success(paid ? t.clients.markedPaid : t.clients.markedUnpaid)
   }
 
   return (
@@ -161,46 +179,97 @@ export function ClientsTable() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filtered.map((c) => (
-              <TableRow key={c.id}>
-                <TableCell className="font-medium">{c.firstName}</TableCell>
-                <TableCell className="font-medium">{c.lastName}</TableCell>
-                <TableCell className="text-muted-foreground">
-                  {c.email}
-                </TableCell>
-                <TableCell>
-                  <Badge
-                    variant="outline"
-                    className={`font-medium ${statusStyles[c.status]}`}
-                  >
-                    {t.courseTypes[c.status]}
-                  </Badge>
-                </TableCell>
-                <TableCell>
-                  <MethodBadge method={c.method} />
-                </TableCell>
-                <TableCell>
-                  {c.paid ? (
+            {filtered.map((c) => {
+              const guardian = c.guardianId ? clientsById.get(c.guardianId) ?? null : null
+              const matches = findClientPayments(c, guardian, seasonTransactions)
+              const hasUnseenEvidence = !c.paid && matches.length > 0
+
+              return (
+                <TableRow key={c.id}>
+                  <TableCell className="font-medium">{c.firstName}</TableCell>
+                  <TableCell className="font-medium">{c.lastName}</TableCell>
+                  <TableCell className="text-muted-foreground">
+                    {c.email}
+                  </TableCell>
+                  <TableCell>
                     <Badge
                       variant="outline"
-                      className="border-transparent bg-success/12 font-medium text-success dark:text-[oklch(0.72_0.14_155)]"
+                      className={`font-medium ${statusStyles[c.status]}`}
                     >
-                      {t.clients.paid}
+                      {t.courseTypes[c.status]}
                     </Badge>
-                  ) : (
-                    <Badge
-                      variant="outline"
-                      className="border-transparent bg-destructive/10 font-medium text-destructive dark:bg-destructive/20"
-                    >
-                      {t.clients.unpaid}
-                    </Badge>
-                  )}
-                </TableCell>
-                <TableCell>
-                  <AddClientDialog client={c} />
-                </TableCell>
-              </TableRow>
-            ))}
+                  </TableCell>
+                  <TableCell>
+                    <MethodBadge method={c.method} />
+                  </TableCell>
+                  <TableCell>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger
+                        render={
+                          <button type="button" className="inline-flex items-center gap-1">
+                            {c.paid ? (
+                              <Badge
+                                variant="outline"
+                                className="border-transparent bg-success/12 font-medium text-success dark:text-[oklch(0.72_0.14_155)]"
+                              >
+                                {t.clients.paid}
+                              </Badge>
+                            ) : (
+                              <Badge
+                                variant="outline"
+                                className="border-transparent bg-destructive/10 font-medium text-destructive dark:bg-destructive/20"
+                              >
+                                {t.clients.unpaid}
+                              </Badge>
+                            )}
+                            {hasUnseenEvidence ? (
+                              <CircleAlertIcon className="size-3.5 text-[oklch(0.55_0.15_60)] dark:text-[oklch(0.8_0.14_65)]" />
+                            ) : null}
+                          </button>
+                        }
+                      />
+                      <DropdownMenuContent align="start" className="w-72">
+                        <DropdownMenuLabel>{t.clients.paymentEvidenceTitle}</DropdownMenuLabel>
+                        {matches.length === 0 ? (
+                          <p className="px-1.5 py-2 text-xs text-muted-foreground">
+                            {t.clients.paymentEvidenceEmpty}
+                          </p>
+                        ) : (
+                          matches.map((m) => (
+                            <div key={m.transaction.id} className="flex flex-col px-1.5 py-1 text-xs">
+                              <span className="font-medium text-foreground">
+                                {formatEuro(m.transaction.amount)} · {formatDate(m.transaction.date)}
+                              </span>
+                              <span className="text-muted-foreground">
+                                {m.via === "guardian" && guardian
+                                  ? t.clients.paymentEvidenceViaGuardian.replace(
+                                      "{name}",
+                                      clientFullName(guardian),
+                                    )
+                                  : m.transaction.description}
+                              </span>
+                            </div>
+                          ))
+                        )}
+                        <DropdownMenuSeparator />
+                        {c.paid ? (
+                          <DropdownMenuItem onClick={() => setPaid(c.id, c.status, false)}>
+                            {t.clients.markUnpaid}
+                          </DropdownMenuItem>
+                        ) : (
+                          <DropdownMenuItem onClick={() => setPaid(c.id, c.status, true)}>
+                            {t.clients.markPaid}
+                          </DropdownMenuItem>
+                        )}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </TableCell>
+                  <TableCell>
+                    <AddClientDialog client={c} />
+                  </TableCell>
+                </TableRow>
+              )
+            })}
           </TableBody>
         </Table>
 
