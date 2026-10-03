@@ -25,6 +25,7 @@ export interface Dictionary {
     dashboard: string
     transactions: string
     clients: string
+    payers: string
     disciplines: string
     materiel: string
     reports: string
@@ -578,6 +579,25 @@ export interface Dictionary {
     disciplineDeleted: string
     noDisciplines: string
     duplicateLabel: string
+  }
+  payers: {
+    title: string
+    subtitle: string
+    addPayer: string
+    addPayerTitle: string
+    editPayerTitle: string
+    addPayerDescription: string
+    searchPlaceholder: string
+    colLinkedAdherents: string
+    totalPayers: string
+    linkedPayers: string
+    unlinkedPayers: string
+    noLinkedAdherent: string
+    payerSaved: string
+    payerDeleted: string
+    noPayers: string
+    deleteBlockedLinked: string
+    importErrorTitle: string
   }
   materiel: {
     title: string

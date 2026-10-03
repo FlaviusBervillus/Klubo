@@ -133,6 +133,8 @@ export function ImportClientsExcelDialog() {
           decision.guardian = { type: "row", rowIndex: Number(state.guardianKey.slice(4)) }
         } else if (state.guardianKey.startsWith("client:")) {
           decision.guardian = { type: "client", clientId: state.guardianKey.slice(7) }
+        } else if (state.guardianKey.startsWith("payer:")) {
+          decision.guardian = { type: "payer", payerId: state.guardianKey.slice(6) }
         }
       }
       decisions[item.rowIndex] = decision
@@ -264,7 +266,8 @@ export function ImportClientsExcelDialog() {
                   const state = rowStates[item.rowIndex]
                   const proceed = state?.proceed ?? true
                   const patchKeys = item.patch ? Object.keys(item.patch) : []
-                  const hasGuardianOptions = item.clusterRowIndexes.length > 0 || !!item.relatedClientId
+                  const hasGuardianOptions =
+                    item.clusterRowIndexes.length > 0 || !!item.relatedClientId || !!item.relatedPayerId
                   return (
                     <TableRow key={item.rowIndex} className={proceed ? "" : "opacity-50"}>
                       <TableCell>
@@ -322,6 +325,14 @@ export function ImportClientsExcelDialog() {
                                     )}
                                   </SelectItem>
                                 ))}
+                                {item.relatedPayerId ? (
+                                  <SelectItem value={`payer:${item.relatedPayerId}`}>
+                                    {t.clients.importGuardianLinkTo.replace(
+                                      "{name}",
+                                      item.relatedPayerName || "",
+                                    )}
+                                  </SelectItem>
+                                ) : null}
                                 {item.relatedClientId ? (
                                   <SelectItem value={`client:${item.relatedClientId}`}>
                                     {t.clients.importGuardianLinkTo.replace(

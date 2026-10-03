@@ -28,6 +28,7 @@ import {
 import { Switch } from "@/components/ui/switch"
 import { useClientsStore } from "@/lib/clients-store"
 import { useDisciplinesStore } from "@/lib/disciplines-store"
+import { usePayersStore } from "@/lib/payers-store"
 import { useSeasonClients } from "@/lib/seasons-store"
 import { useTranslation } from "@/lib/i18n/context"
 import {
@@ -50,7 +51,7 @@ const emptyForm = {
   birthDate: "",
   postalCode: "",
   city: "",
-  guardianId: "none",
+  payerId: "none",
 }
 
 function formFromClient(client: Client) {
@@ -66,19 +67,19 @@ function formFromClient(client: Client) {
     birthDate: client.birthDate ?? "",
     postalCode: client.postalCode,
     city: client.city,
-    guardianId: client.guardianId ?? "none",
+    payerId: client.payerId ?? "none",
   }
 }
 
 export function AddClientDialog({ client }: { client?: Client } = {}) {
   const { t } = useTranslation()
-  const { clients, addClient, updateClient, available } = useClientsStore()
+  const { addClient, updateClient, available } = useClientsStore()
   const { setClientSeasonInfo, hasActiveSeason } = useSeasonClients()
   const { disciplines } = useDisciplinesStore()
+  const { payers } = usePayersStore()
   const [open, setOpen] = useState(false)
   const [form, setForm] = useState(client ? formFromClient(client) : emptyForm)
   const isEdit = !!client
-  const guardianCandidates = clients.filter((c) => c.id !== client?.id)
 
   useEffect(() => {
     if (open) {
@@ -96,7 +97,7 @@ export function AddClientDialog({ client }: { client?: Client } = {}) {
       const { status, paid, ...identity } = form
       await updateClient(client.id, {
         ...identity,
-        guardianId: identity.guardianId === "none" ? null : identity.guardianId,
+        payerId: identity.payerId === "none" ? null : identity.payerId,
       })
       // Le cours et le paiement sont propres à la saison active ; sans saison sélectionnée,
       // on garde l'ancien comportement (écriture directe sur la fiche client).
@@ -111,7 +112,7 @@ export function AddClientDialog({ client }: { client?: Client } = {}) {
       await addClient({
         id: newId,
         ...form,
-        guardianId: form.guardianId === "none" ? null : form.guardianId,
+        payerId: form.payerId === "none" ? null : form.payerId,
       })
       // Un nouveau client rejoint aussitôt l'effectif de la saison active, sinon il n'apparaîtrait
       // nulle part (les saisons démarrent volontairement avec un effectif vide).
@@ -295,8 +296,8 @@ export function AddClientDialog({ client }: { client?: Client } = {}) {
             <Field>
               <FieldLabel>{t.clients.guardianFieldLabel}</FieldLabel>
               <Select
-                value={form.guardianId}
-                onValueChange={(v) => setForm((f) => ({ ...f, guardianId: v ?? "none" }))}
+                value={form.payerId}
+                onValueChange={(v) => setForm((f) => ({ ...f, payerId: v ?? "none" }))}
               >
                 <SelectTrigger>
                   <SelectValue placeholder={t.clients.guardianFieldNone} />
@@ -304,9 +305,9 @@ export function AddClientDialog({ client }: { client?: Client } = {}) {
                 <SelectContent>
                   <SelectGroup>
                     <SelectItem value="none">{t.clients.guardianFieldNone}</SelectItem>
-                    {guardianCandidates.map((c) => (
-                      <SelectItem key={c.id} value={c.id}>
-                        {`${c.firstName} ${c.lastName}`.trim()}
+                    {payers.map((p) => (
+                      <SelectItem key={p.id} value={p.id}>
+                        {`${p.firstName} ${p.lastName}`.trim()}
                       </SelectItem>
                     ))}
                   </SelectGroup>

@@ -9,7 +9,7 @@ export interface DbUser {
 }
 
 export interface ReceiptOverrides {
-  clientId: string | null
+  payerId: string | null
   firstName: string
   lastName: string
   email: string
@@ -18,7 +18,6 @@ export interface ReceiptOverrides {
 
 export interface DbClient {
   id: string
-  stripe_customer_id: string | null
   first_name: string
   last_name: string
   email: string
@@ -30,7 +29,19 @@ export interface DbClient {
   birth_date: string | null
   postal_code: string
   city: string
-  guardian_id: string | null
+  payer_id: string | null
+}
+
+export interface DbPayer {
+  id: string
+  stripe_customer_id: string | null
+  first_name: string
+  last_name: string
+  email: string
+  phone: string
+  address: string
+  postal_code: string
+  city: string
 }
 
 export interface ImportPlanItem {
@@ -61,12 +72,18 @@ export interface ImportPlanItem {
   patch: Record<string, unknown> | null
   relatedClientId: string | null
   relatedClientName: string | null
+  relatedPayerId: string | null
+  relatedPayerName: string | null
   clusterRowIndexes: number[]
 }
 
 export interface ImportDecision {
   proceed?: boolean
-  guardian?: { type: "row"; rowIndex: number } | { type: "client"; clientId: string } | null
+  guardian?:
+    | { type: "row"; rowIndex: number }
+    | { type: "client"; clientId: string }
+    | { type: "payer"; payerId: string }
+    | null
 }
 
 export interface ImportBatch {
@@ -171,6 +188,15 @@ declare global {
         createClient: (client: Record<string, unknown>) => Promise<void>
         updateClient: (id: string, patch: Record<string, unknown>) => Promise<void>
         deleteClient: (id: string) => Promise<void>
+
+        getPayers: () => Promise<DbPayer[]>
+        createPayer: (
+          payer: Record<string, unknown>,
+        ) => Promise<{ ok: true; id: string } | { ok: false; error?: string }>
+        updatePayer: (id: string, patch: Record<string, unknown>) => Promise<void>
+        deletePayer: (id: string) => Promise<void>
+        ensurePayerForClient: (clientId: string) => Promise<string | null>
+
         analyzeExcelImport: () => Promise<
           | { ok: true; items: ImportPlanItem[] }
           | { ok: false; error?: string; canceled?: boolean }
@@ -249,7 +275,7 @@ declare global {
         | {
             ok: true
             tx: { id: string; description: string; amount: number; date: string; method: string }
-            client: DbClient | null
+            client: DbPayer | null
             stripeInvoicePdfUrl: string | null
           }
         | { ok: false; error?: string }

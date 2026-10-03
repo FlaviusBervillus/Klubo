@@ -98,7 +98,9 @@ export interface Client {
   birthDate: string | null
   postalCode: string
   city: string
-  guardianId: string | null
+  /** Payeur associé (voir lib/payers-store.tsx) : la personne qui règle ses cotisations, pas
+   * forcément lui-même — peut être null tant que personne n'a encore été désigné. */
+  payerId: string | null
 }
 
 /* ---------- Helpers ---------- */

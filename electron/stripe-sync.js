@@ -39,12 +39,13 @@ async function syncCustomers(secretKey) {
   const customers = await paginate("/v1/customers", secretKey)
   for (const c of customers) {
     const { firstName, lastName } = splitName(c)
-    db.upsertClientByStripeId({
+    // Un client Stripe est celui qui RÈGLE, pas forcément un adhérent (souvent un parent) : on
+    // alimente la liste des payeurs, jamais directement celle des adhérents — voir /payeurs.
+    db.upsertPayerByStripeId({
       stripeCustomerId: c.id,
       firstName,
       lastName,
       email: c.email || "",
-      method: "stripe",
     })
   }
   return customers.length
@@ -96,16 +97,10 @@ async function syncCharges(secretKey) {
         db.applyDetectedCourseType({ stripeCustomerId: charge.customer, courseType })
       } else if (charge.billing_details?.name || charge.billing_details?.email || charge.receipt_email) {
         // Stripe ne renseigne pas toujours billing_details.email (ex. saisie carte sans reçu) :
-        // on retombe sur receipt_email, puis, à défaut, on déduplique par nom (voir findGuestClient).
+        // on retombe sur receipt_email, puis, à défaut, on déduplique par nom (voir findGuestPayer).
         const email = charge.billing_details?.email || charge.receipt_email || ""
         const { firstName, lastName } = splitName({ name: charge.billing_details?.name, email })
-        db.upsertGuestClient({
-          firstName,
-          lastName,
-          email,
-          method: "stripe",
-          ...(courseType ? { status: courseType } : {}),
-        })
+        db.upsertGuestPayer({ firstName, lastName, email })
         db.applyDetectedCourseType({ email, firstName, lastName, courseType })
       }
 

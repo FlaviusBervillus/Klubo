@@ -169,6 +169,19 @@ function migrate(db) {
       price REAL NOT NULL DEFAULT 0,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
+
+    CREATE TABLE IF NOT EXISTS payers (
+      id TEXT PRIMARY KEY,
+      stripe_customer_id TEXT UNIQUE,
+      first_name TEXT NOT NULL DEFAULT '',
+      last_name TEXT NOT NULL DEFAULT '',
+      email TEXT NOT NULL DEFAULT '',
+      phone TEXT NOT NULL DEFAULT '',
+      address TEXT NOT NULL DEFAULT '',
+      postal_code TEXT NOT NULL DEFAULT '',
+      city TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
   `)
 
   ensureColumn(db, "clients", "address", "address TEXT NOT NULL DEFAULT ''")
@@ -176,13 +189,18 @@ function migrate(db) {
   ensureColumn(db, "clients", "birth_date", "birth_date TEXT")
   ensureColumn(db, "clients", "postal_code", "postal_code TEXT NOT NULL DEFAULT ''")
   ensureColumn(db, "clients", "city", "city TEXT NOT NULL DEFAULT ''")
+  // "guardian_id" n'est plus utilisé par le code (voir payer_id / migratePayersBackfill ci-dessous)
+  // mais la colonne reste en base — comme pour cotisation_prices, on ne DROP jamais une colonne qui
+  // contenait des données réelles, au cas où une ancienne sauvegarde/export y ferait encore référence.
   ensureColumn(db, "clients", "guardian_id", "guardian_id TEXT")
+  ensureColumn(db, "clients", "payer_id", "payer_id TEXT")
   // Facture réellement générée par Stripe (Stripe Invoicing) pour cette charge, quand elle existe :
   // on préfère toujours la vraie facture Stripe à celle que l'on génère nous-mêmes.
   ensureColumn(db, "transactions", "stripe_invoice_pdf_url", "stripe_invoice_pdf_url TEXT")
 
   migrateSeasonMembershipBackfill(db)
   migrateDisciplinesBackfill(db)
+  migratePayersBackfill(db)
 }
 
 /** Les disciplines étaient une liste fixe codée en dur ("Kung-fu Adulte", "Ado", "Enfant"…) : on la
@@ -220,6 +238,59 @@ function migrateDisciplinesBackfill(db) {
   }
 
   db.prepare("INSERT INTO settings (key, value) VALUES ('disciplinesMigrated', '1')").run()
+}
+
+/** Un "client" mélangeait jusqu'ici deux rôles différents : l'adhérent (celui qui suit un cours) et
+ * le payeur (celui qui règle — souvent un parent, pas forcément lui-même adhérent). On les sépare :
+ * chaque adhérent garde sa fiche (cours, statut payé) mais pointe désormais vers une fiche "payeur"
+ * distincte (payer_id) au lieu de pointer vers une autre fiche client (guardian_id). Ne s'exécute
+ * qu'une fois ; ne supprime jamais de fiche existante (trop risqué sur des données réelles) — les
+ * anciennes fiches "tuteur" qui n'étaient en fait que des payeurs restent visibles dans Adhérents
+ * jusqu'à ce que le trésorier les nettoie lui-même depuis l'écran dédié. */
+function migratePayersBackfill(db) {
+  const already = db.prepare("SELECT value FROM settings WHERE key = 'payersMigrated'").get()
+  if (already) return
+
+  const clients = db.prepare("SELECT * FROM clients").all()
+  const insertPayer = db.prepare(
+    `INSERT INTO payers (id, stripe_customer_id, first_name, last_name, email, phone, address, postal_code, city)
+     VALUES (@id, @stripeCustomerId, @firstName, @lastName, @email, @phone, @address, @postalCode, @city)`,
+  )
+  const setPayerId = db.prepare("UPDATE clients SET payer_id = @payerId WHERE id = @clientId")
+
+  // clientId de la personne "résolue" comme payeur -> id du payer déjà créé pour elle (une fratrie
+  // partageant le même tuteur ne doit donner naissance qu'à un seul payeur, pas un par enfant).
+  const payerIdByResolvedClientId = new Map()
+
+  function resolvePayerClientId(client) {
+    if (!client.guardian_id) return client.id
+    const guardian = clients.find((c) => c.id === client.guardian_id)
+    return guardian ? guardian.id : client.id
+  }
+
+  for (const client of clients) {
+    const resolvedId = resolvePayerClientId(client)
+    let payerId = payerIdByResolvedClientId.get(resolvedId)
+    if (!payerId) {
+      const source = clients.find((c) => c.id === resolvedId) || client
+      payerId = crypto.randomUUID()
+      insertPayer.run({
+        id: payerId,
+        stripeCustomerId: source.stripe_customer_id || null,
+        firstName: source.first_name,
+        lastName: source.last_name,
+        email: source.email || "",
+        phone: source.phone || "",
+        address: source.address || "",
+        postalCode: source.postal_code || "",
+        city: source.city || "",
+      })
+      payerIdByResolvedClientId.set(resolvedId, payerId)
+    }
+    setPayerId.run({ payerId, clientId: client.id })
+  }
+
+  db.prepare("INSERT INTO settings (key, value) VALUES ('payersMigrated', '1')").run()
 }
 
 /** Avant cette fonctionnalité, "client_seasons" ne servait qu'à surclasser cours/payé : une
@@ -328,24 +399,187 @@ function getClients() {
 function createClient(client) {
   getDb()
     .prepare(
-      `INSERT INTO clients (id, stripe_customer_id, first_name, last_name, email, status, method, paid, address, phone, birth_date, postal_code, city, guardian_id)
-       VALUES (@id, @stripeCustomerId, @firstName, @lastName, @email, @status, @method, @paid, @address, @phone, @birthDate, @postalCode, @city, @guardianId)`,
+      `INSERT INTO clients (id, first_name, last_name, email, status, method, paid, address, phone, birth_date, postal_code, city, payer_id)
+       VALUES (@id, @firstName, @lastName, @email, @status, @method, @paid, @address, @phone, @birthDate, @postalCode, @city, @payerId)`,
     )
     .run({
       ...client,
-      stripeCustomerId: client.stripeCustomerId ?? null,
       paid: client.paid ? 1 : 0,
       address: client.address ?? "",
       phone: client.phone ?? "",
       birthDate: client.birthDate ?? null,
       postalCode: client.postalCode ?? "",
       city: client.city ?? "",
-      guardianId: client.guardianId ?? null,
+      payerId: client.payerId ?? null,
     })
 }
 
 function getClientById(id) {
   return getDb().prepare("SELECT * FROM clients WHERE id = ?").get(id) ?? null
+}
+
+/* ---------- Payeurs (identité de facturation — distincte des adhérents, voir migratePayersBackfill) ---------- */
+function getPayers() {
+  return getDb().prepare("SELECT * FROM payers ORDER BY created_at").all()
+}
+
+function getPayerById(id) {
+  if (!id) return null
+  return getDb().prepare("SELECT * FROM payers WHERE id = ?").get(id) ?? null
+}
+
+function createPayer(payer) {
+  const id = payer.id || crypto.randomUUID()
+  getDb()
+    .prepare(
+      `INSERT INTO payers (id, stripe_customer_id, first_name, last_name, email, phone, address, postal_code, city)
+       VALUES (@id, @stripeCustomerId, @firstName, @lastName, @email, @phone, @address, @postalCode, @city)`,
+    )
+    .run({
+      id,
+      stripeCustomerId: payer.stripeCustomerId ?? null,
+      firstName: payer.firstName || "",
+      lastName: payer.lastName || "",
+      email: payer.email || "",
+      phone: payer.phone || "",
+      address: payer.address || "",
+      postalCode: payer.postalCode || "",
+      city: payer.city || "",
+    })
+  return id
+}
+
+function updatePayer(id, patch) {
+  const fields = []
+  const params = { id }
+  for (const [key, column] of [
+    ["firstName", "first_name"],
+    ["lastName", "last_name"],
+    ["email", "email"],
+    ["phone", "phone"],
+    ["address", "address"],
+    ["postalCode", "postal_code"],
+    ["city", "city"],
+  ]) {
+    if (patch[key] !== undefined) {
+      fields.push(`${column} = @${key}`)
+      params[key] = patch[key]
+    }
+  }
+  if (fields.length === 0) return
+  getDb().prepare(`UPDATE payers SET ${fields.join(", ")} WHERE id = @id`).run(params)
+}
+
+function deletePayer(id) {
+  // Jamais de suppression en cascade : les adhérents liés perdent juste leur payeur (plutôt que
+  // d'être supprimés eux aussi), le trésorier devra leur en choisir un autre s'il en faut un.
+  getDb().prepare("UPDATE clients SET payer_id = NULL WHERE payer_id = ?").run(id)
+  getDb().prepare("DELETE FROM payers WHERE id = ?").run(id)
+}
+
+/** Retrouve un payeur existant pour l'import/le rapprochement : par email (insensible à la casse)
+ * en priorité, sinon par prénom+nom exacts (insensible à la casse). */
+function findPayerForImport({ email, firstName, lastName }) {
+  if (email) {
+    const match = getDb()
+      .prepare("SELECT * FROM payers WHERE email <> '' AND lower(email) = lower(@email)")
+      .get({ email })
+    if (match) return match
+  }
+  return getDb()
+    .prepare(`SELECT * FROM payers WHERE lower(first_name) = lower(@firstName) AND lower(last_name) = lower(@lastName)`)
+    .get({ firstName, lastName })
+}
+
+/** S'assure qu'un adhérent a un payeur (le crée depuis sa propre fiche s'il n'en a pas déjà un) et
+ * retourne son id — utilisé quand on choisit "cet adhérent" comme payeur d'un autre (ex. un grand
+ * frère qui règle pour sa sœur) : on réutilise son payeur existant plutôt que d'en recréer un. */
+function ensurePayerForClient(clientId) {
+  const client = getClientById(clientId)
+  if (!client) return null
+  if (client.payer_id) return client.payer_id
+  const payerId = createPayer({
+    firstName: client.first_name,
+    lastName: client.last_name,
+    email: client.email || "",
+    phone: client.phone || "",
+    address: client.address || "",
+    postalCode: client.postal_code || "",
+    city: client.city || "",
+  })
+  getDb().prepare("UPDATE clients SET payer_id = @payerId WHERE id = @id").run({ payerId, id: clientId })
+  return payerId
+}
+
+function upsertPayerByStripeId(payer) {
+  const existing = getDb().prepare("SELECT id FROM payers WHERE stripe_customer_id = ?").get(payer.stripeCustomerId)
+  if (existing) {
+    getDb()
+      .prepare(
+        `UPDATE payers SET first_name=@firstName, last_name=@lastName, email=@email WHERE stripe_customer_id=@stripeCustomerId`,
+      )
+      .run(payer)
+    return existing.id
+  }
+  return createPayer(payer)
+}
+
+/** Payeur "invité" Stripe (paiement sans compte client Stripe) : pas d'id Stripe, déduplication par
+ * email, ou par nom si Stripe ne fournit aucun email. */
+function findGuestPayer({ email, firstName, lastName }) {
+  if (email) {
+    return getDb().prepare("SELECT id FROM payers WHERE stripe_customer_id IS NULL AND email = ?").get(email)
+  }
+  return getDb()
+    .prepare(
+      `SELECT id FROM payers
+       WHERE stripe_customer_id IS NULL AND (email IS NULL OR email = '') AND first_name = @firstName AND last_name = @lastName`,
+    )
+    .get({ firstName, lastName })
+}
+
+function upsertGuestPayer(payer) {
+  const existing = findGuestPayer(payer)
+  if (existing) {
+    getDb()
+      .prepare(`UPDATE payers SET first_name=@firstName, last_name=@lastName WHERE id=@id`)
+      .run({ firstName: payer.firstName, lastName: payer.lastName, id: existing.id })
+    return existing.id
+  }
+  return createPayer({ ...payer, email: payer.email || "" })
+}
+
+/** Retrouve le payeur lié à une transaction Stripe (pour préremplir la facture avec son identité de
+ * facturation — nom/adresse —, qui n'est pas forcément celle de l'adhérent qui suit le cours). */
+function findPayerForTransaction(tx) {
+  if (tx.method !== "stripe" || !tx.stripe_raw_json) return null
+  let charge = null
+  try {
+    charge = JSON.parse(tx.stripe_raw_json)
+  } catch {
+    return null
+  }
+  if (charge.customer) {
+    return getDb().prepare("SELECT * FROM payers WHERE stripe_customer_id = ?").get(charge.customer) ?? null
+  }
+  const email = charge.billing_details?.email || charge.receipt_email || null
+  if (email) {
+    return getDb().prepare("SELECT * FROM payers WHERE stripe_customer_id IS NULL AND email = ?").get(email) ?? null
+  }
+  if (charge.billing_details?.name) {
+    const parts = charge.billing_details.name.trim().split(/\s+/)
+    const firstName = parts[0]
+    const lastName = parts.slice(1).join(" ") || ""
+    return (
+      getDb()
+        .prepare(
+          `SELECT * FROM payers
+           WHERE stripe_customer_id IS NULL AND (email IS NULL OR email = '') AND first_name = ? AND last_name = ?`,
+        )
+        .get(firstName, lastName) ?? null
+    )
+  }
+  return null
 }
 
 /** Inscrit un client dans la saison active s'il n'y est pas déjà (les saisons démarrent vides,
@@ -359,45 +593,6 @@ function enrollInActiveSeasonIfNeeded(clientId, status) {
     .get({ clientId, activeSeasonId })
   if (already) return
   setClientSeason(clientId, activeSeasonId, { status: status || "Non catégorisé", paid: false })
-}
-
-function upsertClientByStripeId(client) {
-  const existing = getDb()
-    .prepare("SELECT id, status FROM clients WHERE stripe_customer_id = ?")
-    .get(client.stripeCustomerId)
-  if (existing) {
-    getDb()
-      .prepare(
-        `UPDATE clients SET first_name=@firstName, last_name=@lastName, email=@email, method=@method
-         WHERE stripe_customer_id=@stripeCustomerId`,
-      )
-      .run(client)
-    enrollInActiveSeasonIfNeeded(existing.id, existing.status)
-  } else {
-    const id = `stripe_${client.stripeCustomerId}`
-    createClient({
-      id,
-      status: "Non catégorisé",
-      paid: true,
-      ...client,
-    })
-    enrollInActiveSeasonIfNeeded(id, client.status || "Non catégorisé")
-  }
-}
-
-/** Retrouve un client "invité" (sans id Stripe) : par email si connu, sinon par nom exact (pas d'email chez les invités). */
-function findGuestClient({ email, firstName, lastName }) {
-  if (email) {
-    return getDb()
-      .prepare("SELECT id, status FROM clients WHERE stripe_customer_id IS NULL AND email = ?")
-      .get(email)
-  }
-  return getDb()
-    .prepare(
-      `SELECT id, status FROM clients
-       WHERE stripe_customer_id IS NULL AND (email IS NULL OR email = '') AND first_name = @firstName AND last_name = @lastName`,
-    )
-    .get({ firstName, lastName })
 }
 
 /** Retrouve TOUS les clients partageant un même email exact (insensible à la casse), sans repli
@@ -425,50 +620,26 @@ function findClientForImport({ email, firstName, lastName }) {
     .get({ firstName, lastName })
 }
 
-/** Retrouve le client lié à une transaction Stripe (pour préremplir la facture avec ses infos, notamment une adresse saisie à la main). */
-function findClientForTransaction(tx) {
-  if (tx.method !== "stripe" || !tx.stripe_raw_json) return null
-  let charge = null
-  try {
-    charge = JSON.parse(tx.stripe_raw_json)
-  } catch {
-    return null
-  }
-  if (charge.customer) {
-    return getDb().prepare("SELECT * FROM clients WHERE stripe_customer_id = ?").get(charge.customer) ?? null
-  }
-  const email = charge.billing_details?.email || charge.receipt_email || null
-  if (email) {
-    return (
-      getDb().prepare("SELECT * FROM clients WHERE stripe_customer_id IS NULL AND email = ?").get(email) ?? null
-    )
-  }
-  if (charge.billing_details?.name) {
-    const parts = charge.billing_details.name.trim().split(/\s+/)
-    const firstName = parts[0]
-    const lastName = parts.slice(1).join(" ") || ""
-    return (
-      getDb()
-        .prepare(
-          `SELECT * FROM clients
-           WHERE stripe_customer_id IS NULL AND (email IS NULL OR email = '') AND first_name = ? AND last_name = ?`,
-        )
-        .get(firstName, lastName) ?? null
-    )
-  }
-  return null
-}
-
-/** Pose le cours détecté depuis la description d'une charge, sans jamais écraser un cours déjà choisi (manuellement ou par une charge précédente). */
+/** Pose le cours détecté depuis la description d'une charge Stripe sur l'adhérent lié au payeur de
+ * cette charge — jamais sur le payeur lui-même, qui n'a pas de cours. Si le payeur n'est lié à
+ * aucun adhérent, ou à plusieurs (ex. deux enfants), on ne devine jamais lequel : le trésorier
+ * catégorise à la main. N'écrase jamais non plus un cours déjà choisi. */
 function applyDetectedCourseType({ stripeCustomerId, email, firstName, lastName, courseType }) {
   if (!courseType) return
-  const row = stripeCustomerId
-    ? getDb().prepare("SELECT id, status FROM clients WHERE stripe_customer_id = ?").get(stripeCustomerId)
-    : findGuestClient({ email, firstName, lastName })
-  if (!row || row.status !== "Non catégorisé") return
+  const payer = stripeCustomerId
+    ? getDb().prepare("SELECT id FROM payers WHERE stripe_customer_id = ?").get(stripeCustomerId)
+    : findGuestPayer({ email, firstName, lastName })
+  if (!payer) return
+
+  const linkedClients = getDb()
+    .prepare("SELECT id, status FROM clients WHERE payer_id = ? AND status = 'Non catégorisé'")
+    .all(payer.id)
+  if (linkedClients.length !== 1) return
+  const row = linkedClients[0]
+
   getDb().prepare("UPDATE clients SET status = @status WHERE id = @id").run({ status: courseType, id: row.id })
 
-  // Si ce client est déjà inscrit à la saison active avec un cours encore indéterminé, on
+  // Si cet adhérent est déjà inscrit à la saison active avec un cours encore indéterminé, on
   // répercute le cours détecté sur son inscription (sinon la page Clients resterait figée
   // sur "Non catégorisé" malgré la mise à jour de sa fiche globale ci-dessus).
   const activeSeasonId = getSettings().activeSeasonId
@@ -482,34 +653,6 @@ function applyDetectedCourseType({ stripeCustomerId, email, firstName, lastName,
         "UPDATE client_seasons SET status = @status WHERE client_id = @id AND season_id = @activeSeasonId",
       )
       .run({ status: courseType, id: row.id, activeSeasonId })
-  }
-}
-
-/** Clients Stripe "invités" (paiement sans compte Stripe) : pas d'id client Stripe, dédupliqués par email, ou par nom si aucun email n'est fourni par Stripe. */
-function upsertGuestClient(client) {
-  const existing = findGuestClient(client)
-  if (existing) {
-    getDb()
-      .prepare(
-        `UPDATE clients SET first_name=@firstName, last_name=@lastName, method=@method WHERE id=@id`,
-      )
-      .run({
-        firstName: client.firstName,
-        lastName: client.lastName,
-        method: client.method,
-        id: existing.id,
-      })
-    enrollInActiveSeasonIfNeeded(existing.id, existing.status)
-  } else {
-    const id = `guest_${crypto.randomUUID()}`
-    createClient({
-      id,
-      status: "Non catégorisé",
-      paid: true,
-      ...client,
-      email: client.email || "",
-    })
-    enrollInActiveSeasonIfNeeded(id, "Non catégorisé")
   }
 }
 
@@ -528,7 +671,7 @@ function updateClient(id, patch) {
     ["birthDate", "birth_date"],
     ["postalCode", "postal_code"],
     ["city", "city"],
-    ["guardianId", "guardian_id"],
+    ["payerId", "payer_id"],
   ]) {
     if (patch[key] !== undefined) {
       fields.push(`${column} = @${key}`)
@@ -989,14 +1132,21 @@ module.exports = {
   getClients,
   createClient,
   getClientById,
-  upsertClientByStripeId,
-  upsertGuestClient,
   applyDetectedCourseType,
   findClientsByEmail,
   findClientForImport,
-  findClientForTransaction,
   updateClient,
   deleteClient,
+  getPayers,
+  getPayerById,
+  createPayer,
+  updatePayer,
+  deletePayer,
+  findPayerForImport,
+  ensurePayerForClient,
+  upsertPayerByStripeId,
+  upsertGuestPayer,
+  findPayerForTransaction,
   createImportBatch,
   addImportBatchChange,
   getImportBatches,

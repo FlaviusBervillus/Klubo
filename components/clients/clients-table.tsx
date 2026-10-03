@@ -38,9 +38,10 @@ import {
 import { Empty } from "@/components/ui/empty"
 import { MethodBadge } from "@/components/finance-badges"
 import { AddClientDialog } from "@/components/clients/add-client-dialog"
-import { clientFullName, findClientPayments } from "@/lib/client-payments"
+import { findClientPayments, payerFullName } from "@/lib/client-payments"
 import { useDisciplinesStore } from "@/lib/disciplines-store"
 import { formatDate, formatEuro, type CourseType } from "@/lib/mock-data"
+import { usePayersStore } from "@/lib/payers-store"
 import { useSeasonClients, useSeasonTransactions } from "@/lib/seasons-store"
 import { useTranslation } from "@/lib/i18n/context"
 
@@ -61,6 +62,7 @@ export function ClientsTable() {
   const { clients, setClientSeasonInfo } = useSeasonClients()
   const seasonTransactions = useSeasonTransactions()
   const { disciplines } = useDisciplinesStore()
+  const { payers } = usePayersStore()
   const [query, setQuery] = useState("")
   const [status, setStatus] = useState("all")
   const [paymentStatus, setPaymentStatus] = useState("all")
@@ -106,7 +108,7 @@ export function ClientsTable() {
     setPaymentStatus("all")
   }
 
-  const clientsById = useMemo(() => new Map(clients.map((c) => [c.id, c])), [clients])
+  const payersById = useMemo(() => new Map(payers.map((p) => [p.id, p])), [payers])
 
   async function setPaid(clientId: string, clientStatus: CourseType, paid: boolean) {
     await setClientSeasonInfo(clientId, { status: clientStatus, paid })
@@ -185,8 +187,8 @@ export function ClientsTable() {
           </TableHeader>
           <TableBody>
             {filtered.map((c) => {
-              const guardian = c.guardianId ? clientsById.get(c.guardianId) ?? null : null
-              const matches = findClientPayments(c, guardian, seasonTransactions)
+              const payer = c.payerId ? payersById.get(c.payerId) ?? null : null
+              const matches = findClientPayments(c, payer, seasonTransactions)
               const hasUnseenEvidence = !c.paid && matches.length > 0
 
               return (
@@ -246,10 +248,10 @@ export function ClientsTable() {
                                 {formatEuro(m.transaction.amount)} · {formatDate(m.transaction.date)}
                               </span>
                               <span className="text-muted-foreground">
-                                {m.via === "guardian" && guardian
+                                {m.via === "payer" && payer
                                   ? t.clients.paymentEvidenceViaGuardian.replace(
                                       "{name}",
-                                      clientFullName(guardian),
+                                      payerFullName(payer),
                                     )
                                   : m.transaction.description}
                               </span>

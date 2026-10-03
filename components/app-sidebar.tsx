@@ -13,6 +13,7 @@ import {
   LogOutIcon,
   PackageIcon,
   GraduationCapIcon,
+  CreditCardIcon,
 } from "lucide-react"
 
 import packageJson from "@/package.json"
@@ -57,6 +58,7 @@ export function AppSidebar() {
       badge: toCategorizeCount,
     },
     { title: t.nav.clients, href: "/clients", icon: UsersIcon },
+    { title: t.nav.payers, href: "/payeurs", icon: CreditCardIcon },
     { title: t.nav.disciplines, href: "/disciplines", icon: GraduationCapIcon },
     { title: t.nav.materiel, href: "/materiel", icon: PackageIcon },
     { title: t.nav.reports, href: "/rapports", icon: FileBarChartIcon },

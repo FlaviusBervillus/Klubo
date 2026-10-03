@@ -23,7 +23,7 @@ function rowToClient(row: DbClient): Client {
     birthDate: row.birth_date ?? null,
     postalCode: row.postal_code ?? "",
     city: row.city ?? "",
-    guardianId: row.guardian_id ?? null,
+    payerId: row.payer_id ?? null,
   }
 }
 
@@ -40,7 +40,7 @@ export interface NewClient {
   birthDate: string | null
   postalCode: string
   city: string
-  guardianId: string | null
+  payerId: string | null
 }
 
 const ClientsContext = createContext<{

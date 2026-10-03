@@ -15,6 +15,15 @@ const { setupAutoUpdater } = require("./updater")
 
 const PROTOCOL = "klubo"
 
+// Sur macOS, un simple geste de défilement horizontal (swipe à deux doigts, par ex. en
+// survolant un tableau large comme celui des clients) est interprété par Chromium comme un
+// "retour en arrière" dans l'historique de navigation. Cette navigation est une vraie requête
+// réseau vers l'URL précédente, pas un simple changement d'état côté React : si elle échoue
+// (ancienne page détail, port different, etc.), Electron affiche une page d'erreur générique et
+// l'historique devient incohérent avec ce que l'utilisateur voit à l'écran. On désactive donc ce
+// geste, qui n'a aucune utilité dans une appli de bureau pilotée au clic.
+app.commandLine.appendSwitch("disable-features", "OverscrollHistoryNavigation")
+
 // Renommage de l'app ("Electron" -> "Klubo" dans le menu, le Dock, la barre de titre) : le
 // dossier de données utilisateur reste explicitement pointé sur l'ancien nom ("my-project",
 // utilisé avant ce renommage) pour ne pas perdre l'accès à la base SQLite déjà existante.
@@ -98,11 +107,25 @@ ipcMain.handle("db:createClient", (_e, client) => {
 ipcMain.handle("db:updateClient", (_e, id, patch) => db.updateClient(id, patch))
 ipcMain.handle("db:deleteClient", (_e, id) => db.deleteClient(id))
 
+ipcMain.handle("db:getPayers", () => db.getPayers())
+ipcMain.handle("db:createPayer", (_e, payer) => {
+  const id = payer.id || crypto.randomUUID()
+  db.createPayer({ ...payer, id })
+  return { ok: true, id }
+})
+ipcMain.handle("db:updatePayer", (_e, id, patch) => db.updatePayer(id, patch))
+ipcMain.handle("db:deletePayer", (_e, id) => db.deletePayer(id))
+ipcMain.handle("db:ensurePayerForClient", (_e, clientId) => db.ensurePayerForClient(clientId))
+
 ipcMain.handle("clients:analyze-excel-import", async () => {
   try {
     const { canceled, filePaths } = await dialog.showOpenDialog(mainWindow, {
-      title: "Importer un fichier Excel de clients",
-      filters: [{ name: "Excel", extensions: ["xlsx", "xls"] }],
+      title: "Importer un fichier de clients",
+      filters: [
+        { name: "Excel / CSV", extensions: ["xlsx", "xls", "csv"] },
+        { name: "Excel", extensions: ["xlsx", "xls"] },
+        { name: "CSV", extensions: ["csv"] },
+      ],
       properties: ["openFile"],
     })
     if (canceled || !filePaths[0]) return { ok: false, canceled: true }
@@ -228,9 +251,9 @@ function getClubSettings() {
   }
 }
 
-/** Client à facturer : celui retrouvé automatiquement (Stripe), sauf si le trésorier a lié/saisi autre chose dans l'aperçu. */
+/** Payeur à facturer : celui retrouvé automatiquement (Stripe), sauf si le trésorier a lié/saisi autre chose dans l'aperçu. */
 function resolveClient(tx, overrides) {
-  if (!overrides) return db.findClientForTransaction(tx)
+  if (!overrides) return db.findPayerForTransaction(tx)
   return {
     id: overrides.clientId || null,
     first_name: overrides.firstName || "",
@@ -243,7 +266,7 @@ function resolveClient(tx, overrides) {
 ipcMain.handle("receipts:prepare", (_e, transactionId) => {
   const tx = db.getTransactionById(transactionId)
   if (!tx) return { ok: false, error: "Transaction introuvable" }
-  const client = db.findClientForTransaction(tx)
+  const client = db.findPayerForTransaction(tx)
   return {
     ok: true,
     tx: { id: tx.id, description: tx.description, amount: tx.amount, date: tx.date, method: tx.method },
@@ -314,15 +337,15 @@ ipcMain.handle("receipts:download", async (_e, transactionId, overrides) => {
     if (!tx) return { ok: false, error: "Transaction introuvable" }
     let client = resolveClient(tx, overrides)
     if (overrides) {
-      const clientId = overrides.clientId || db.findClientForTransaction(tx)?.id || null
-      if (clientId) {
-        db.updateClient(clientId, {
+      const payerId = overrides.clientId || db.findPayerForTransaction(tx)?.id || null
+      if (payerId) {
+        db.updatePayer(payerId, {
           firstName: overrides.firstName,
           lastName: overrides.lastName,
           email: overrides.email,
           address: overrides.address,
         })
-        client = { ...client, id: clientId }
+        client = { ...client, id: payerId }
       }
     }
     const pdfBuffer = await generateReceiptPdf(tx, getClubSettings(), client)

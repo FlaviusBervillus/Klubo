@@ -23,7 +23,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { useClientsStore } from "@/lib/clients-store"
+import { usePayersStore } from "@/lib/payers-store"
 import { useTranslation } from "@/lib/i18n/context"
 import type { ReceiptOverrides } from "@/types/electron"
 
@@ -41,8 +41,8 @@ interface ReceiptPreviewDialogProps {
 
 export function ReceiptPreviewDialog({ transactionId, onOpenChange }: ReceiptPreviewDialogProps) {
   const { t } = useTranslation()
-  const { clients } = useClientsStore()
-  const clientItems = clients.map((c) => ({ value: c.id, label: `${c.firstName} ${c.lastName}`.trim() }))
+  const { payers } = usePayersStore()
+  const clientItems = payers.map((p) => ({ value: p.id, label: `${p.firstName} ${p.lastName}`.trim() }))
   const [loading, setLoading] = useState(false)
   const [hasResolvedClient, setHasResolvedClient] = useState(false)
   const [selectedClientId, setSelectedClientId] = useState("")
@@ -103,7 +103,7 @@ export function ReceiptPreviewDialog({ transactionId, onOpenChange }: ReceiptPre
     async function refreshPreview() {
       const electronApi = window.electronAPI
       if (!electronApi) return
-      const overrides: ReceiptOverrides = { clientId: selectedClientId || null, ...form }
+      const overrides: ReceiptOverrides = { payerId: selectedClientId || null, ...form }
       const result = await electronApi.renderReceiptPreview(transactionId as string, overrides)
       if (!cancelled && result.ok) setHtml(result.html)
     }
@@ -115,9 +115,9 @@ export function ReceiptPreviewDialog({ transactionId, onOpenChange }: ReceiptPre
 
   function selectClient(id: string) {
     setSelectedClientId(id)
-    const c = clients.find((cl) => cl.id === id)
-    if (c) {
-      setForm({ firstName: c.firstName, lastName: c.lastName, email: c.email, address: c.address })
+    const p = payers.find((pl) => pl.id === id)
+    if (p) {
+      setForm({ firstName: p.firstName, lastName: p.lastName, email: p.email, address: p.address })
     }
   }
 
@@ -137,7 +137,7 @@ export function ReceiptPreviewDialog({ transactionId, onOpenChange }: ReceiptPre
       }
       return
     }
-    const overrides: ReceiptOverrides = { clientId: selectedClientId || null, ...form }
+    const overrides: ReceiptOverrides = { payerId: selectedClientId || null, ...form }
     const result = await electronApi.downloadReceipt(transactionId, overrides)
     setBusy(false)
     if (result.ok) {

@@ -54,11 +54,12 @@ import { Input } from "@/components/ui/input"
 import { MethodBadge, StatusBadge, Amount } from "@/components/finance-badges"
 import { ReceiptPreviewDialog } from "@/components/transactions/receipt-preview-dialog"
 import { useClientsStore } from "@/lib/clients-store"
-import { clientFullName, findLinkedChildren, normalizeClientName } from "@/lib/client-payments"
+import { clientFullName, findLinkedChildren, normalizeClientName, payerFullName } from "@/lib/client-payments"
 import { applyCotisationAutoMatch } from "@/lib/cotisation-matching"
 import { useDisciplinesStore } from "@/lib/disciplines-store"
 import { applyEquipmentAutoMatch } from "@/lib/equipment-matching"
 import { useEquipmentStore } from "@/lib/equipment-store"
+import { usePayersStore } from "@/lib/payers-store"
 import { useClubSettings } from "@/lib/club-settings"
 import { useTranslation } from "@/lib/i18n/context"
 import {
@@ -82,6 +83,7 @@ export function TransactionDetailView() {
     updateMember: updateMemberInStore,
   } = useTransactionsStore()
   const { clients, updateClient } = useClientsStore()
+  const { payers } = usePayersStore()
   const { setClientSeasonInfo, hasActiveSeason } = useSeasonClients()
   const { disciplines } = useDisciplinesStore()
   const prices = Object.fromEntries(disciplines.map((d) => [d.label, d.price]))
@@ -155,11 +157,12 @@ export function TransactionDetailView() {
   }))
 
   // Cas fréquent : un parent règle la cotisation de son enfant, la transaction reste à son nom —
-  // on le détecte pour proposer de réattribuer directement à l'enfant inscrit.
-  const matchedGuardian = tx.member
-    ? clients.find((c) => normalizeClientName(clientFullName(c)) === normalizeClientName(tx.member!))
+  // on le détecte (via le payeur, pas l'adhérent) pour proposer de réattribuer directement à
+  // l'enfant inscrit.
+  const matchedPayer = tx.member
+    ? payers.find((p) => normalizeClientName(payerFullName(p)) === normalizeClientName(tx.member!))
     : undefined
-  const linkedChildren = matchedGuardian ? findLinkedChildren(matchedGuardian, clients) : []
+  const linkedChildren = matchedPayer ? findLinkedChildren(matchedPayer, clients) : []
 
   function reassignToChild(childName: string) {
     updateMemberInStore(txId, childName)

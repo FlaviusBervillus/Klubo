@@ -1,4 +1,5 @@
 const crypto = require("crypto")
+const path = require("path")
 const ExcelJS = require("exceljs")
 const db = require("./db")
 
@@ -22,7 +23,6 @@ const FIELD_TO_COLUMN = {
   city: "city",
   birthDate: "birth_date",
   status: "status",
-  guardianId: "guardian_id",
 }
 
 /** Insensible aux accents, à la casse, aux espaces/underscores/tirets — pour tolérer les
@@ -40,6 +40,7 @@ const HEADER_MAP = {
   nom: "lastName",
   prenom: "firstName",
   categorie: "category",
+  discipline: "category", // colonne plus spécifique que "categorie" quand les deux existent (ex. export Notion) : voir le filtrage "valeur non vide" dans parseRows, qui la fait primer
   email: "email",
   email1: "email",
   telephone: "phone",
@@ -49,6 +50,10 @@ const HEADER_MAP = {
   adresse: "address",
   codepostal: "postalCode",
   ville: "city",
+  nomrepresentantlegal: "guardianLastName",
+  prenomrepresentantlegal: "guardianFirstName",
+  nomrepresentantlegal2: "guardianLastName2",
+  prenomrepresentantlegal2: "guardianFirstName2",
 }
 
 /** Rapproche la catégorie lue dans le fichier avec une discipline connue (celles configurées sur
@@ -93,11 +98,14 @@ function clientFullName(client) {
   return `${client.first_name} ${client.last_name}`.trim()
 }
 
-/** Lit le fichier Excel et le transforme en lignes exploitables (sans toucher à la base). */
+/** Lit le fichier (Excel ou CSV — un export Notion sort en CSV) et le transforme en lignes
+ * exploitables (sans toucher à la base). */
 async function parseExcelFile(filePath) {
   const workbook = new ExcelJS.Workbook()
-  await workbook.xlsx.readFile(filePath)
-  const sheet = workbook.worksheets[0]
+  const isCsv = path.extname(filePath).toLowerCase() === ".csv"
+  const sheet = isCsv
+    ? await workbook.csv.readFile(filePath)
+    : await workbook.xlsx.readFile(filePath).then(() => workbook.worksheets[0])
   if (!sheet) return []
 
   const headerRow = sheet.getRow(1)
@@ -113,7 +121,10 @@ async function parseExcelFile(filePath) {
     if (row.cellCount === 0) continue
     const data = {}
     for (const [colNumber, key] of Object.entries(columnMap)) {
-      data[key] = cellText(row.getCell(Number(colNumber)))
+      // Plusieurs colonnes peuvent viser le même champ (ex. "CATEGORIE" et "DISCIPLINE") : on ne
+      // laisse une colonne vide écraser une valeur déjà lue par une colonne précédente.
+      const value = cellText(row.getCell(Number(colNumber)))
+      if (value !== null && value !== undefined && String(value).trim() !== "") data[key] = value
     }
     const firstName = String(data.firstName || "").trim()
     const lastName = String(data.lastName || "").trim()
@@ -128,6 +139,12 @@ async function parseExcelFile(filePath) {
       city: String(data.city || "").trim(),
       birthDate: parseBirthDate(data.birthDate),
       category: data.category ? String(data.category).trim() : "",
+      // Représentant légal (parent/tuteur) : utilisé uniquement pour proposer un lien
+      // tuteur/enfant à la vérification — ne touche jamais au statut/cours de qui que ce soit.
+      guardianFirstName: String(data.guardianFirstName || "").trim(),
+      guardianLastName: String(data.guardianLastName || "").trim(),
+      guardianFirstName2: String(data.guardianFirstName2 || "").trim(),
+      guardianLastName2: String(data.guardianLastName2 || "").trim(),
     })
   }
   return rows
@@ -165,6 +182,8 @@ async function analyzeImport(filePath) {
     let patch = null
     let relatedClientId = null
     let relatedClientName = null
+    let relatedPayerId = null
+    let relatedPayerName = null
 
     // Un email peut être partagé par plusieurs personnes (parent + enfant) : on cherche d'abord
     // celle dont le nom correspond exactement, et seulement si aucune ne correspond on considère
@@ -215,6 +234,8 @@ async function analyzeImport(filePath) {
       patch,
       relatedClientId,
       relatedClientName,
+      relatedPayerId,
+      relatedPayerName,
       clusterRowIndexes: [],
     }
   })
@@ -236,6 +257,47 @@ async function analyzeImport(filePath) {
       item.clusterRowIndexes = group
         .filter((other) => other !== item && normalizeName(other.firstName, other.lastName) !== normalizeName(item.firstName, item.lastName))
         .map((other) => other.rowIndex)
+    }
+  }
+
+  // Repère le·s représentant·s légal·aux (parent/tuteur = payeur) indiqué·s nommément sur la
+  // ligne (ex. colonnes "NOM/PRENOM REPRESENTANT LEGAL" d'un export Notion) : un signal plus
+  // fiable qu'un email partagé, lui aussi proposé en complément, jamais imposé — seul le cours de
+  // l'enfant (déjà calculé plus haut, sur sa propre ligne) détermine son statut, le lien ne fait
+  // que relier les deux fiches. On préfère, dans l'ordre : une ligne du même fichier, un payeur
+  // déjà connu, puis un adhérent existant (qui deviendra aussi payeur si on le choisit).
+  for (const item of items) {
+    const guardianNamePairs = [
+      [item.guardianFirstName, item.guardianLastName],
+      [item.guardianFirstName2, item.guardianLastName2],
+    ].filter(([first, last]) => first || last)
+
+    for (const [guardianFirst, guardianLast] of guardianNamePairs) {
+      const guardianNorm = normalizeName(guardianFirst, guardianLast)
+      if (!guardianNorm || guardianNorm === normalizeName(item.firstName, item.lastName)) continue
+
+      const peerRow = items.find(
+        (other) => other !== item && normalizeName(other.firstName, other.lastName) === guardianNorm,
+      )
+      if (peerRow) {
+        if (!item.clusterRowIndexes.includes(peerRow.rowIndex)) item.clusterRowIndexes.push(peerRow.rowIndex)
+        continue
+      }
+      if (!item.relatedPayerId) {
+        const existingPayer = db.findPayerForImport({ email: "", firstName: guardianFirst, lastName: guardianLast })
+        if (existingPayer) {
+          item.relatedPayerId = existingPayer.id
+          item.relatedPayerName = clientFullName({ first_name: existingPayer.first_name, last_name: existingPayer.last_name })
+          continue
+        }
+      }
+      if (!item.relatedClientId) {
+        const existingGuardian = db.findClientForImport({ email: "", firstName: guardianFirst, lastName: guardianLast })
+        if (existingGuardian && existingGuardian.id !== item.matchedClientId) {
+          item.relatedClientId = existingGuardian.id
+          item.relatedClientName = clientFullName(existingGuardian)
+        }
+      }
     }
   }
 
@@ -312,7 +374,6 @@ function applyImport(items, decisions) {
         status: item.courseType || "Non catégorisé",
         method: "especes",
         paid: false,
-        guardianId: null,
       })
       db.addImportBatchChange({ id: crypto.randomUUID(), batchId, clientId: id, kind: "create", previousJson: null })
       enrollInActiveSeasonIfNeeded(id, item.courseType)
@@ -321,26 +382,37 @@ function applyImport(items, decisions) {
     }
   }
 
+  // Le lien choisi désigne toujours un PAYEUR (jamais directement un autre adhérent) : s'il s'agit
+  // d'une ligne du fichier ou d'un adhérent existant, on lui garantit un payeur (le sien, créé au
+  // besoin depuis sa propre fiche) plutôt que de créer un doublon à chaque import.
   let linked = 0
   for (const item of items) {
     const decision = decisions[item.rowIndex]
     if (!decision || decision.proceed === false || !decision.guardian) continue
     const childClientId = rowIndexToClientId[item.rowIndex]
     if (!childClientId) continue
-    const guardianClientId =
-      decision.guardian.type === "row"
-        ? rowIndexToClientId[decision.guardian.rowIndex] || null
-        : decision.guardian.clientId || null
-    if (!guardianClientId || guardianClientId === childClientId) continue
+
+    let payerId = null
+    if (decision.guardian.type === "row") {
+      const peerClientId = rowIndexToClientId[decision.guardian.rowIndex] || null
+      if (peerClientId && peerClientId !== childClientId) payerId = db.ensurePayerForClient(peerClientId)
+    } else if (decision.guardian.type === "client") {
+      if (decision.guardian.clientId && decision.guardian.clientId !== childClientId) {
+        payerId = db.ensurePayerForClient(decision.guardian.clientId)
+      }
+    } else if (decision.guardian.type === "payer") {
+      payerId = decision.guardian.payerId || null
+    }
+    if (!payerId) continue
 
     const before = db.getClientById(childClientId)
-    db.updateClient(childClientId, { guardianId: guardianClientId })
+    db.updateClient(childClientId, { payerId })
     db.addImportBatchChange({
       id: crypto.randomUUID(),
       batchId,
       clientId: childClientId,
       kind: "update",
-      previousJson: JSON.stringify({ guardianId: before.guardian_id ?? null }),
+      previousJson: JSON.stringify({ payerId: before.payer_id ?? null }),
     })
     linked++
   }

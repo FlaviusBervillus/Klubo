@@ -1,7 +1,7 @@
 "use client"
 
-import { useMemo, useState } from "react"
-import { useRouter, useSearchParams } from "next/navigation"
+import { useEffect, useMemo, useState } from "react"
+import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import {
   SearchIcon,
   MoreHorizontalIcon,
@@ -62,6 +62,7 @@ import { useTransactionsStore } from "@/lib/transactions-store"
 
 export function TransactionsTable() {
   const router = useRouter()
+  const pathname = usePathname()
   const searchParams = useSearchParams()
   const { t } = useTranslation()
   const rows = useSeasonTransactions()
@@ -71,12 +72,27 @@ export function TransactionsTable() {
   const { disciplines } = useDisciplinesStore()
   const prices = Object.fromEntries(disciplines.map((d) => [d.label, d.price]))
   const { items: equipmentItems, updateItem: updateEquipmentItem } = useEquipmentStore()
-  const [query, setQuery] = useState("")
-  const [category, setCategory] = useState("all")
-  const [method, setMethod] = useState("all")
-  const [status, setStatus] = useState(searchParams.get("statut") ?? "all")
-  const [period, setPeriod] = useState("all")
+  // Les filtres sont répercutés dans l'URL (voir l'effet ci-dessous) afin de survivre à un
+  // aller-retour vers le détail d'une transaction : sans ça, revenir en arrière remonte ce
+  // composant et perd tous les filtres choisis.
+  const [query, setQuery] = useState(searchParams?.get("recherche") ?? "")
+  const [category, setCategory] = useState(searchParams?.get("categorie") ?? "all")
+  const [method, setMethod] = useState(searchParams?.get("methode") ?? "all")
+  const [status, setStatus] = useState(searchParams?.get("statut") ?? "all")
+  const [period, setPeriod] = useState(searchParams?.get("periode") ?? "all")
   const [previewTxId, setPreviewTxId] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!pathname) return
+    const params = new URLSearchParams()
+    if (query) params.set("recherche", query)
+    if (category !== "all") params.set("categorie", category)
+    if (method !== "all") params.set("methode", method)
+    if (status !== "all") params.set("statut", status)
+    if (period !== "all") params.set("periode", period)
+    const qs = params.toString()
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false })
+  }, [query, category, method, status, period, pathname, router])
 
   const periods = [
     { value: "all", label: t.transactions.periodAll },

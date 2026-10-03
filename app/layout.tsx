@@ -13,6 +13,7 @@ import { DisciplinesProvider } from "@/lib/disciplines-store"
 import { EquipmentProvider } from "@/lib/equipment-store"
 import { FixedAssetsProvider } from "@/lib/fixed-assets-store"
 import { LocaleProvider } from "@/lib/i18n/context"
+import { PayersProvider } from "@/lib/payers-store"
 import { SeasonsProvider } from "@/lib/seasons-store"
 import { SecureVaultProvider } from "@/lib/secure-vault"
 import { TransactionsProvider } from "@/lib/transactions-store"
@@ -64,23 +65,25 @@ export default function RootLayout({
               <SecureVaultProvider>
                 <SeasonsProvider>
                   <TransactionsProvider>
-                    <ClientsProvider>
-                      <FixedAssetsProvider>
-                        <DebtsProvider>
-                          <DisciplinesProvider>
-                            <EquipmentProvider>
-                              <AuthProvider>
-                                <AuthGate>
-                                  <AppShell>{children}</AppShell>
-                                  <VaultUnlockPrompt />
-                                </AuthGate>
-                                <Toaster position="top-right" />
-                              </AuthProvider>
-                            </EquipmentProvider>
-                          </DisciplinesProvider>
-                        </DebtsProvider>
-                      </FixedAssetsProvider>
-                    </ClientsProvider>
+                    <PayersProvider>
+                      <ClientsProvider>
+                        <FixedAssetsProvider>
+                          <DebtsProvider>
+                            <DisciplinesProvider>
+                              <EquipmentProvider>
+                                <AuthProvider>
+                                  <AuthGate>
+                                    <AppShell>{children}</AppShell>
+                                    <VaultUnlockPrompt />
+                                  </AuthGate>
+                                  <Toaster position="top-right" />
+                                </AuthProvider>
+                              </EquipmentProvider>
+                            </DisciplinesProvider>
+                          </DebtsProvider>
+                        </FixedAssetsProvider>
+                      </ClientsProvider>
+                    </PayersProvider>
                   </TransactionsProvider>
                 </SeasonsProvider>
               </SecureVaultProvider>

@@ -19,6 +19,12 @@ contextBridge.exposeInMainWorld("electronAPI", {
     createClient: (client) => ipcRenderer.invoke("db:createClient", client),
     updateClient: (id, patch) => ipcRenderer.invoke("db:updateClient", id, patch),
     deleteClient: (id) => ipcRenderer.invoke("db:deleteClient", id),
+
+    getPayers: () => ipcRenderer.invoke("db:getPayers"),
+    createPayer: (payer) => ipcRenderer.invoke("db:createPayer", payer),
+    updatePayer: (id, patch) => ipcRenderer.invoke("db:updatePayer", id, patch),
+    deletePayer: (id) => ipcRenderer.invoke("db:deletePayer", id),
+    ensurePayerForClient: (clientId) => ipcRenderer.invoke("db:ensurePayerForClient", clientId),
     analyzeExcelImport: () => ipcRenderer.invoke("clients:analyze-excel-import"),
     applyExcelImport: (items, decisions) =>
       ipcRenderer.invoke("clients:apply-excel-import", items, decisions),
