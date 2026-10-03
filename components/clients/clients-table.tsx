@@ -96,6 +96,13 @@ export function ClientsTable() {
     { value: "unpaid", label: t.clients.unpaid },
   ]
 
+  const paidItems = [
+    { value: "paid", label: t.clients.paid },
+    { value: "unpaid", label: t.clients.unpaid },
+  ]
+
+  const methodItems = ALL_PAYMENT_METHODS.map((m) => ({ value: m, label: t.methods[m] }))
+
   const filtered = useMemo(() => {
     return clients.filter((c) => {
       if (query) {
@@ -236,6 +243,7 @@ export function ClientsTable() {
                       <span className="text-muted-foreground">—</span>
                     ) : (
                       <Select
+                        items={methodItems}
                         value={c.method}
                         onValueChange={(v) => v && setMethod(c.id, v as PaymentMethod)}
                       >
@@ -257,6 +265,7 @@ export function ClientsTable() {
                   <TableCell>
                     <div className="flex items-center gap-1">
                       <Select
+                        items={paidItems}
                         value={c.paid ? "paid" : "unpaid"}
                         onValueChange={(v) => v && setPaid(c.id, c.status, v === "paid")}
                       >
