@@ -471,6 +471,10 @@ export const fr: Dictionary = {
     deleteConfirmTitle: "Supprimer cet adhérent ?",
     deleteConfirmDescription:
       "La fiche de {name} sera définitivement supprimée. Ses transactions passées ne sont pas touchées.",
+    generateInvoice: "Générer la facture",
+    invoiceNoTransaction: "Aucune transaction trouvée pour cet adhérent.",
+    invoicePickerTitle: "Choisir la transaction à facturer",
+    invoicePickerDescription: "Plusieurs paiements correspondent à {name} — choisis lequel facturer.",
     searchPlaceholder: "Rechercher (nom, email…)",
     allStatuses: "Tous les cours",
     colFirstName: "Prénom",

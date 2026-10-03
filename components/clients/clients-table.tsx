@@ -1,7 +1,7 @@
 "use client"
 
 import { useMemo, useState } from "react"
-import { CircleAlertIcon, SearchIcon, Trash2Icon } from "lucide-react"
+import { CircleAlertIcon, ReceiptTextIcon, SearchIcon, Trash2Icon } from "lucide-react"
 import { toast } from "sonner"
 
 import { Badge } from "@/components/ui/badge"
@@ -39,6 +39,7 @@ import {
 } from "@/components/ui/table"
 import { Empty } from "@/components/ui/empty"
 import { AddClientDialog } from "@/components/clients/add-client-dialog"
+import { ReceiptPreviewDialog } from "@/components/transactions/receipt-preview-dialog"
 import { findClientPayments, payerFullName } from "@/lib/client-payments"
 import { useClientsStore } from "@/lib/clients-store"
 import { useDisciplinesStore } from "@/lib/disciplines-store"
@@ -78,6 +79,11 @@ export function ClientsTable() {
   const [paymentStatus, setPaymentStatus] = useState("all")
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null)
   const [deleteBusy, setDeleteBusy] = useState(false)
+  const [invoicePickerTarget, setInvoicePickerTarget] = useState<{
+    name: string
+    matches: ReturnType<typeof findClientPayments>
+  } | null>(null)
+  const [previewTxId, setPreviewTxId] = useState<string | null>(null)
 
   function statusStyle(course: CourseType) {
     if (course === "Non catégorisé") return UNCATEGORIZED_STYLE
@@ -136,6 +142,22 @@ export function ClientsTable() {
 
   async function setMethod(clientId: string, method: PaymentMethod) {
     await updateClient(clientId, { method })
+  }
+
+  /** La facture documente un règlement : on ne peut en générer une que pour une transaction
+   * retrouvée (correspondance par nom, directe ou via le payeur — ex. un parent qui règle par
+   * Stripe pour son enfant, voir findClientPayments). Une seule correspondance : ouvre directement
+   * l'aperçu. Plusieurs : l'utilisateur choisit laquelle facturer. */
+  function openInvoice(clientName: string, matches: ReturnType<typeof findClientPayments>) {
+    if (matches.length === 0) {
+      toast.error(t.clients.invoiceNoTransaction)
+      return
+    }
+    if (matches.length === 1) {
+      setPreviewTxId(matches[0].transaction.id)
+      return
+    }
+    setInvoicePickerTarget({ name: clientName, matches })
   }
 
   async function handleDeleteConfirm() {
@@ -214,7 +236,7 @@ export function ClientsTable() {
               <TableHead>{t.clients.colStatus}</TableHead>
               <TableHead>{t.clients.colPayment}</TableHead>
               <TableHead>{t.clients.colPaymentStatus}</TableHead>
-              <TableHead className="w-20" />
+              <TableHead className="w-28" />
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -334,6 +356,14 @@ export function ClientsTable() {
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center justify-end gap-1">
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        aria-label={t.clients.generateInvoice}
+                        onClick={() => openInvoice(`${c.firstName} ${c.lastName}`.trim(), matches)}
+                      >
+                        <ReceiptTextIcon />
+                      </Button>
                       <AddClientDialog client={c} />
                       <Button
                         variant="ghost"
@@ -383,6 +413,47 @@ export function ClientsTable() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <Dialog open={!!invoicePickerTarget} onOpenChange={(open) => !open && setInvoicePickerTarget(null)}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>{t.clients.invoicePickerTitle}</DialogTitle>
+            <DialogDescription>
+              {t.clients.invoicePickerDescription.replace("{name}", invoicePickerTarget?.name ?? "")}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col gap-2">
+            {invoicePickerTarget?.matches.map((m) => (
+              <Button
+                key={m.transaction.id}
+                variant="outline"
+                className="h-auto flex-col items-start gap-0.5 py-2"
+                onClick={() => {
+                  setPreviewTxId(m.transaction.id)
+                  setInvoicePickerTarget(null)
+                }}
+              >
+                <span className="font-medium">
+                  {formatEuro(m.transaction.amount)} · {formatDate(m.transaction.date)}
+                </span>
+                <span className="text-xs font-normal text-muted-foreground">
+                  {m.transaction.description}
+                </span>
+              </Button>
+            ))}
+          </div>
+          <DialogFooter>
+            <DialogClose render={<Button variant="outline">{t.common.cancel}</Button>} />
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <ReceiptPreviewDialog
+        transactionId={previewTxId}
+        onOpenChange={(open) => {
+          if (!open) setPreviewTxId(null)
+        }}
+      />
     </div>
   )
 }

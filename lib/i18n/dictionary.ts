@@ -437,6 +437,10 @@ export interface Dictionary {
     deleteButton: string
     deleteConfirmTitle: string
     deleteConfirmDescription: string
+    generateInvoice: string
+    invoiceNoTransaction: string
+    invoicePickerTitle: string
+    invoicePickerDescription: string
     searchPlaceholder: string
     allStatuses: string
     colFirstName: string
