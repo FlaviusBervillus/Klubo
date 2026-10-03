@@ -55,6 +55,10 @@ import { MethodBadge, StatusBadge, Amount } from "@/components/finance-badges"
 import { ReceiptPreviewDialog } from "@/components/transactions/receipt-preview-dialog"
 import { useClientsStore } from "@/lib/clients-store"
 import { clientFullName, findLinkedChildren, normalizeClientName } from "@/lib/client-payments"
+import { applyCotisationAutoMatch } from "@/lib/cotisation-matching"
+import { useCotisationPrices } from "@/lib/cotisation-prices-store"
+import { applyEquipmentAutoMatch } from "@/lib/equipment-matching"
+import { useEquipmentStore } from "@/lib/equipment-store"
 import { useClubSettings } from "@/lib/club-settings"
 import { useTranslation } from "@/lib/i18n/context"
 import {
@@ -64,6 +68,7 @@ import {
   type Category,
   type Transaction,
 } from "@/lib/mock-data"
+import { useSeasonClients } from "@/lib/seasons-store"
 import { useTransactionsStore } from "@/lib/transactions-store"
 
 export function TransactionDetailView() {
@@ -76,7 +81,10 @@ export function TransactionDetailView() {
     categorize: categorizeInStore,
     updateMember: updateMemberInStore,
   } = useTransactionsStore()
-  const { clients } = useClientsStore()
+  const { clients, updateClient } = useClientsStore()
+  const { setClientSeasonInfo, hasActiveSeason } = useSeasonClients()
+  const { prices } = useCotisationPrices()
+  const { items: equipmentItems, updateItem: updateEquipmentItem } = useEquipmentStore()
   const tx = getTransaction(id)
   const [previewOpen, setPreviewOpen] = useState(false)
 
@@ -99,6 +107,8 @@ export function TransactionDetailView() {
   const refundedAmount = stripeRaw?.amount_refunded ? stripeRaw.amount_refunded / 100 : 0
 
   const txId = tx.id
+  const txMember = tx.member
+  const txAmount = tx.amount
 
   function openReceiptPreview() {
     setPreviewOpen(true)
@@ -109,6 +119,33 @@ export function TransactionDetailView() {
     toast.success(t.transactions.categoryChanged, {
       description: t.categories[targetCategory],
     })
+    if (targetCategory === "Cotisations") {
+      applyCotisationAutoMatch({ member: txMember, amount: txAmount }, clients, prices, {
+        hasActiveSeason,
+        setClientSeasonInfo,
+        updateClient,
+      }).then((result) => {
+        if (!result) return
+        toast.success(
+          result.courseUpdated
+            ? t.transactions.cotisationMatchedCourse
+                .replace("{name}", result.clientName)
+                .replace("{course}", t.courseTypes[result.courseUpdated])
+            : t.transactions.cotisationMatchedPaid.replace("{name}", result.clientName),
+        )
+      })
+    }
+    if (targetCategory === "Équipements") {
+      applyEquipmentAutoMatch(txAmount, equipmentItems, updateEquipmentItem).then((result) => {
+        if (!result) return
+        toast.success(
+          t.transactions.equipmentMatched
+            .replace("{label}", result.label)
+            .replace("{stock}", String(result.remainingStock)),
+          result.alreadyEmpty ? { description: t.transactions.equipmentAlreadyEmpty } : undefined,
+        )
+      })
+    }
   }
 
   const categoryItems = ASSIGNABLE_CATEGORIES.map((c) => ({

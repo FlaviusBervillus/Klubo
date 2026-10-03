@@ -147,6 +147,16 @@ ipcMain.handle("db:createDebt", (_e, debt) => {
 ipcMain.handle("db:updateDebt", (_e, id, patch) => db.updateDebt(id, patch))
 ipcMain.handle("db:deleteDebt", (_e, id) => db.deleteDebt(id))
 
+ipcMain.handle("db:getCotisationPrices", () => db.getCotisationPrices())
+ipcMain.handle("db:setCotisationPrice", (_e, courseType, price) => db.setCotisationPrice(courseType, price))
+
+ipcMain.handle("db:getEquipmentItems", () => db.getEquipmentItems())
+ipcMain.handle("db:createEquipmentItem", (_e, item) => {
+  db.createEquipmentItem({ ...item, id: item.id || crypto.randomUUID() })
+})
+ipcMain.handle("db:updateEquipmentItem", (_e, id, patch) => db.updateEquipmentItem(id, patch))
+ipcMain.handle("db:deleteEquipmentItem", (_e, id) => db.deleteEquipmentItem(id))
+
 ipcMain.handle("db:getTransactions", () => db.getTransactions())
 ipcMain.handle("db:createTransaction", (_e, tx) => {
   db.createTransaction({ ...tx, id: tx.id || crypto.randomUUID() })

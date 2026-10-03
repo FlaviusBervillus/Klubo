@@ -147,6 +147,21 @@ function migrate(db) {
       notes TEXT NOT NULL DEFAULT '',
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
+
+    CREATE TABLE IF NOT EXISTS cotisation_prices (
+      course_type TEXT PRIMARY KEY,
+      price REAL NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS equipment_items (
+      id TEXT PRIMARY KEY,
+      label TEXT NOT NULL,
+      stock_quantity INTEGER NOT NULL DEFAULT 0,
+      purchase_price REAL NOT NULL DEFAULT 0,
+      sale_price REAL NOT NULL DEFAULT 0,
+      notes TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
   `)
 
   ensureColumn(db, "clients", "address", "address TEXT NOT NULL DEFAULT ''")
@@ -822,6 +837,58 @@ function deleteDebt(id) {
   getDb().prepare("DELETE FROM debts WHERE id = ?").run(id)
 }
 
+/* ---------- Tarifs des cotisations (par cours), pour retrouver automatiquement le cours payé ---------- */
+function getCotisationPrices() {
+  const rows = getDb().prepare("SELECT course_type, price FROM cotisation_prices").all()
+  return Object.fromEntries(rows.map((r) => [r.course_type, r.price]))
+}
+
+function setCotisationPrice(courseType, price) {
+  getDb()
+    .prepare(
+      `INSERT INTO cotisation_prices (course_type, price) VALUES (@courseType, @price)
+       ON CONFLICT(course_type) DO UPDATE SET price = excluded.price`,
+    )
+    .run({ courseType, price })
+}
+
+/* ---------- Matériel / stock d'équipements ---------- */
+function getEquipmentItems() {
+  return getDb().prepare("SELECT * FROM equipment_items ORDER BY label").all()
+}
+
+function createEquipmentItem(item) {
+  getDb()
+    .prepare(
+      `INSERT INTO equipment_items (id, label, stock_quantity, purchase_price, sale_price, notes)
+       VALUES (@id, @label, @stockQuantity, @purchasePrice, @salePrice, @notes)`,
+    )
+    .run({ ...item, notes: item.notes ?? "" })
+}
+
+function updateEquipmentItem(id, patch) {
+  const fields = []
+  const params = { id }
+  for (const [key, column] of [
+    ["label", "label"],
+    ["stockQuantity", "stock_quantity"],
+    ["purchasePrice", "purchase_price"],
+    ["salePrice", "sale_price"],
+    ["notes", "notes"],
+  ]) {
+    if (patch[key] !== undefined) {
+      fields.push(`${column} = @${key}`)
+      params[key] = patch[key]
+    }
+  }
+  if (fields.length === 0) return
+  getDb().prepare(`UPDATE equipment_items SET ${fields.join(", ")} WHERE id = @id`).run(params)
+}
+
+function deleteEquipmentItem(id) {
+  getDb().prepare("DELETE FROM equipment_items WHERE id = ?").run(id)
+}
+
 function getDbFilePath() {
   return path.join(app.getPath("userData"), "compta.sqlite3")
 }
@@ -867,6 +934,12 @@ module.exports = {
   createDebt,
   updateDebt,
   deleteDebt,
+  getCotisationPrices,
+  setCotisationPrice,
+  getEquipmentItems,
+  createEquipmentItem,
+  updateEquipmentItem,
+  deleteEquipmentItem,
   getTransactions,
   getTransactionById,
   createTransaction,

@@ -4,6 +4,7 @@ import { LockIcon, ShieldAlertIcon } from "lucide-react"
 
 import { ChangeVaultPassphraseDialog } from "@/components/parametres/change-vault-passphrase-dialog"
 import { ClubIdentityCard } from "@/components/parametres/club-identity-card"
+import { CotisationPricesCard } from "@/components/parametres/cotisation-prices-card"
 import { StripeConnectCard } from "@/components/parametres/stripe-connect-card"
 import { GoCardlessCard } from "@/components/parametres/gocardless-card"
 import { BackupCard } from "@/components/parametres/backup-card"
@@ -63,6 +64,8 @@ export default function ParametresPage() {
       </div>
 
       <ClubIdentityCard />
+
+      <CotisationPricesCard />
 
       <VaultGate>
         <div className="grid gap-4 lg:grid-cols-3">

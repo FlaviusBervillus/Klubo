@@ -44,6 +44,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     "/": t.dashboard.title,
     "/transactions": t.nav.transactions,
     "/clients": t.nav.clients,
+    "/materiel": t.nav.materiel,
     "/rapports": t.nav.reports,
     "/parametres": t.nav.settings,
     "/utilisateurs": t.nav.users,

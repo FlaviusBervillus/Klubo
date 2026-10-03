@@ -98,6 +98,15 @@ export interface DbDebt {
   notes: string
 }
 
+export interface DbEquipmentItem {
+  id: string
+  label: string
+  stock_quantity: number
+  purchase_price: number
+  sale_price: number
+  notes: string
+}
+
 export interface DbTransaction {
   id: string
   date: string
@@ -179,6 +188,14 @@ declare global {
         createDebt: (debt: Record<string, unknown>) => Promise<void>
         updateDebt: (id: string, patch: Record<string, unknown>) => Promise<void>
         deleteDebt: (id: string) => Promise<void>
+
+        getCotisationPrices: () => Promise<Record<string, number>>
+        setCotisationPrice: (courseType: string, price: number) => Promise<void>
+
+        getEquipmentItems: () => Promise<DbEquipmentItem[]>
+        createEquipmentItem: (item: Record<string, unknown>) => Promise<void>
+        updateEquipmentItem: (id: string, patch: Record<string, unknown>) => Promise<void>
+        deleteEquipmentItem: (id: string) => Promise<void>
 
         getTransactions: () => Promise<DbTransaction[]>
         createTransaction: (tx: Record<string, unknown>) => Promise<void>

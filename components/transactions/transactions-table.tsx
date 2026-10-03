@@ -50,9 +50,14 @@ import { Empty } from "@/components/ui/empty"
 import { MethodBadge, StatusBadge, Amount } from "@/components/finance-badges"
 import { ReceiptPreviewDialog } from "@/components/transactions/receipt-preview-dialog"
 import { useTranslation } from "@/lib/i18n/context"
+import { applyCotisationAutoMatch } from "@/lib/cotisation-matching"
+import { useCotisationPrices } from "@/lib/cotisation-prices-store"
+import { applyEquipmentAutoMatch } from "@/lib/equipment-matching"
+import { useEquipmentStore } from "@/lib/equipment-store"
+import { useClientsStore } from "@/lib/clients-store"
 import { ASSIGNABLE_CATEGORIES, formatDate, formatEuro, type Category } from "@/lib/mock-data"
 import { downloadReceiptOrOpenPreview } from "@/lib/receipt-actions"
-import { useSeasonTransactions } from "@/lib/seasons-store"
+import { useSeasonClients, useSeasonTransactions } from "@/lib/seasons-store"
 import { useTransactionsStore } from "@/lib/transactions-store"
 
 export function TransactionsTable() {
@@ -61,6 +66,10 @@ export function TransactionsTable() {
   const { t } = useTranslation()
   const rows = useSeasonTransactions()
   const { categorize: categorizeInStore } = useTransactionsStore()
+  const { clients, updateClient } = useClientsStore()
+  const { setClientSeasonInfo, hasActiveSeason } = useSeasonClients()
+  const { prices } = useCotisationPrices()
+  const { items: equipmentItems, updateItem: updateEquipmentItem } = useEquipmentStore()
   const [query, setQuery] = useState("")
   const [category, setCategory] = useState("all")
   const [method, setMethod] = useState("all")
@@ -128,11 +137,44 @@ export function TransactionsTable() {
     return { entrees, sorties, net: entrees - sorties, fees }
   }, [filtered])
 
+  async function runCotisationAutoMatch(id: string) {
+    const tx = rows.find((r) => r.id === id)
+    if (!tx) return
+    const result = await applyCotisationAutoMatch(tx, clients, prices, {
+      hasActiveSeason,
+      setClientSeasonInfo,
+      updateClient,
+    })
+    if (!result) return
+    toast.success(
+      result.courseUpdated
+        ? t.transactions.cotisationMatchedCourse
+            .replace("{name}", result.clientName)
+            .replace("{course}", t.courseTypes[result.courseUpdated])
+        : t.transactions.cotisationMatchedPaid.replace("{name}", result.clientName),
+    )
+  }
+
+  async function runEquipmentAutoMatch(id: string) {
+    const tx = rows.find((r) => r.id === id)
+    if (!tx) return
+    const result = await applyEquipmentAutoMatch(tx.amount, equipmentItems, updateEquipmentItem)
+    if (!result) return
+    toast.success(
+      t.transactions.equipmentMatched
+        .replace("{label}", result.label)
+        .replace("{stock}", String(result.remainingStock)),
+      result.alreadyEmpty ? { description: t.transactions.equipmentAlreadyEmpty } : undefined,
+    )
+  }
+
   function categorize(id: string, targetCategory: Category) {
     categorizeInStore(id, targetCategory)
     toast.success(t.transactions.classifiedSuccess, {
       description: t.categories[targetCategory],
     })
+    if (targetCategory === "Cotisations") runCotisationAutoMatch(id)
+    if (targetCategory === "Équipements") runEquipmentAutoMatch(id)
   }
 
   function changeCategory(id: string, targetCategory: Category) {
@@ -140,6 +182,8 @@ export function TransactionsTable() {
     toast.success(t.transactions.categoryChanged, {
       description: t.categories[targetCategory],
     })
+    if (targetCategory === "Cotisations") runCotisationAutoMatch(id)
+    if (targetCategory === "Équipements") runEquipmentAutoMatch(id)
   }
 
   function openReceiptPreview(id: string) {
