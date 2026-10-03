@@ -815,6 +815,10 @@ function updateTransaction(id, patch) {
   getDb().prepare(`UPDATE transactions SET ${fields.join(", ")} WHERE id = @id`).run(params)
 }
 
+function deleteTransaction(id) {
+  getDb().prepare("DELETE FROM transactions WHERE id = ?").run(id)
+}
+
 /* ---------- Bank transactions (GoCardless) ---------- */
 function getBankTransactions() {
   return getDb().prepare("SELECT * FROM bank_transactions ORDER BY date DESC").all()
@@ -883,6 +887,25 @@ function getSeasons() {
   return getDb().prepare("SELECT * FROM seasons ORDER BY start_date DESC").all()
 }
 
+function findSeasonByLabel(label) {
+  if (!label) return null
+  return getDb().prepare("SELECT * FROM seasons WHERE lower(label) = lower(?)").get(label.trim()) ?? null
+}
+
+/** Retrouve une saison par son libellé (ex. import d'un fichier qui porte une colonne "Saison"),
+ * ou la crée si elle n'existe pas encore — en déduisant ses dates du format "AAAA-AAAA" habituel
+ * des clubs sportifs (1er septembre -> 31 août), seul format que ce libellé prend dans la pratique. */
+function findOrCreateSeasonByLabel(label) {
+  const existing = findSeasonByLabel(label)
+  if (existing) return existing
+  const match = label.trim().match(/^(\d{4})\s*-\s*(\d{4})$/)
+  const startDate = match ? `${match[1]}-09-01` : `${new Date().getFullYear()}-09-01`
+  const endDate = match ? `${match[2]}-08-31` : `${new Date().getFullYear() + 1}-08-31`
+  const id = crypto.randomUUID()
+  createSeason({ id, label: label.trim(), startDate, endDate })
+  return { id, label: label.trim(), start_date: startDate, end_date: endDate }
+}
+
 function createSeason({ id, label, startDate, endDate }) {
   getDb()
     .prepare("INSERT INTO seasons (id, label, start_date, end_date) VALUES (@id, @label, @startDate, @endDate)")
@@ -909,6 +932,93 @@ function updateSeason(id, patch) {
 function deleteSeason(id) {
   getDb().prepare("DELETE FROM seasons WHERE id = ?").run(id)
   getDb().prepare("DELETE FROM client_seasons WHERE season_id = ?").run(id)
+}
+
+/** Même comparaison "date locale" que isDateInSeason côté renderer (lib/seasons-store.tsx) : une
+ * transaction à 1h du matin heure de Paris le 1er septembre reste datée du 31 août en UTC, ce qui
+ * la classerait à tort hors saison si on comparait la chaîne ISO brute. */
+function isDateInRange(dateIso, startDate, endDate) {
+  const d = new Date(dateIso)
+  const localDate = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`
+  return localDate >= startDate && localDate <= endDate
+}
+
+const SEASON_DELETE_MIN_AGE_YEARS = 5
+
+/** Supprime définitivement une saison ET tout ce qui s'y rapporte : les transactions dont la date
+ * tombe dans sa période, les adhérents qui n'étaient inscrits QUE dans cette saison (ceux inscrits
+ * à d'autres saisons sont seulement désinscrits de celle-ci, leur fiche reste intacte), et leur
+ * payeur si plus aucun adhérent ne le référence ensuite. Bloqué pour une saison trop récente — la
+ * comptabilité associative doit être conservée au moins SEASON_DELETE_MIN_AGE_YEARS ans ; penser à
+ * exporter la saison avant de la supprimer, l'opération est irréversible. */
+function deleteSeasonCascade(id) {
+  const season = getDb().prepare("SELECT * FROM seasons WHERE id = ?").get(id)
+  if (!season) return { ok: false, error: "Saison introuvable" }
+
+  const minEndDate = new Date()
+  minEndDate.setFullYear(minEndDate.getFullYear() - SEASON_DELETE_MIN_AGE_YEARS)
+  const minEndDateIso = minEndDate.toISOString().slice(0, 10)
+  if (season.end_date > minEndDateIso) {
+    return {
+      ok: false,
+      error: `Pour conserver la comptabilité au moins ${SEASON_DELETE_MIN_AGE_YEARS} ans, seule une saison terminée depuis plus de ${SEASON_DELETE_MIN_AGE_YEARS} ans peut être supprimée définitivement.`,
+    }
+  }
+
+  const allTransactions = getDb().prepare("SELECT id, date FROM transactions").all()
+  const transactionIds = allTransactions
+    .filter((tx) => isDateInRange(tx.date, season.start_date, season.end_date))
+    .map((tx) => tx.id)
+  for (const txId of transactionIds) deleteTransaction(txId)
+
+  const enrolledClientIds = getDb()
+    .prepare("SELECT client_id FROM client_seasons WHERE season_id = ?")
+    .all(id)
+    .map((r) => r.client_id)
+
+  getDb().prepare("DELETE FROM client_seasons WHERE season_id = ?").run(id)
+
+  let deletedClients = 0
+  let deletedPayers = 0
+  for (const clientId of enrolledClientIds) {
+    const stillElsewhere = getDb()
+      .prepare("SELECT 1 FROM client_seasons WHERE client_id = ?")
+      .get(clientId)
+    if (stillElsewhere) continue // inscrit à une autre saison : fiche conservée, juste désinscrit d'ici
+
+    const client = getClientById(clientId)
+    deleteClient(clientId)
+    deletedClients++
+
+    if (client?.payer_id) {
+      const payerStillUsed = getDb().prepare("SELECT 1 FROM clients WHERE payer_id = ?").get(client.payer_id)
+      if (!payerStillUsed) {
+        deletePayer(client.payer_id)
+        deletedPayers++
+      }
+    }
+  }
+
+  getDb().prepare("DELETE FROM seasons WHERE id = ?").run(id)
+
+  return {
+    ok: true,
+    deletedTransactions: transactionIds.length,
+    deletedClients,
+    deletedPayers,
+  }
+}
+
+/** Supprime un payeur et les adhérents qui lui sont liés (une fiche "payeur-only" n'a plus lieu
+ * d'être si on supprime tous les adhérents qu'elle finançait). Ne touche JAMAIS aux transactions :
+ * elles ne sont reliées à un payeur que par correspondance de nom (texte libre), un lien bien trop
+ * incertain pour en déduire une suppression — voir deleteSeasonCascade pour la suppression fiable
+ * par plage de dates. */
+function deletePayerCascade(id) {
+  const linkedClients = getDb().prepare("SELECT id FROM clients WHERE payer_id = ?").all(id)
+  for (const c of linkedClients) deleteClient(c.id)
+  deletePayer(id)
+  return { ok: true, deletedClients: linkedClients.length }
 }
 
 /** Statut ("cours") + paiement des clients INSCRITS à cette saison : une ligne "client_seasons"
@@ -1142,6 +1252,7 @@ module.exports = {
   createPayer,
   updatePayer,
   deletePayer,
+  deletePayerCascade,
   findPayerForImport,
   ensurePayerForClient,
   upsertPayerByStripeId,
@@ -1176,6 +1287,7 @@ module.exports = {
   upsertTransactionByChargeId,
   upsertTransactionById,
   updateTransaction,
+  deleteTransaction,
   getBankTransactions,
   insertBankTransactions,
   getSettings,
@@ -1185,9 +1297,12 @@ module.exports = {
   getSyncState,
   setSyncState,
   getSeasons,
+  findSeasonByLabel,
+  findOrCreateSeasonByLabel,
   createSeason,
   updateSeason,
   deleteSeason,
+  deleteSeasonCascade,
   getClientSeasonMap,
   setClientSeason,
   deleteClientSeason,

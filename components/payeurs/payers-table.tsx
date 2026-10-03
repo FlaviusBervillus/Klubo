@@ -7,6 +7,15 @@ import { toast } from "sonner"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { Empty } from "@/components/ui/empty"
 import {
   InputGroup,
@@ -28,9 +37,11 @@ import { useTranslation } from "@/lib/i18n/context"
 
 export function PayersTable() {
   const { t } = useTranslation()
-  const { payers, deletePayer } = usePayersStore()
-  const { clients } = useClientsStore()
+  const { payers, deletePayer, deletePayerCascade } = usePayersStore()
+  const { clients, refresh: refreshClients } = useClientsStore()
   const [query, setQuery] = useState("")
+  const [cascadeTarget, setCascadeTarget] = useState<{ id: string; names: string[] } | null>(null)
+  const [cascadeBusy, setCascadeBusy] = useState(false)
 
   const linkedClientsByPayer = useMemo(() => {
     const map = new Map<string, string[]>()
@@ -55,11 +66,25 @@ export function PayersTable() {
   async function handleDelete(id: string) {
     const linked = linkedClientsByPayer.get(id)
     if (linked && linked.length > 0) {
-      toast.error(t.payers.deleteBlockedLinked.replace("{names}", linked.join(", ")))
+      setCascadeTarget({ id, names: linked })
       return
     }
     await deletePayer(id)
     toast.success(t.payers.payerDeleted)
+  }
+
+  async function handleCascadeConfirm() {
+    if (!cascadeTarget) return
+    setCascadeBusy(true)
+    const result = await deletePayerCascade(cascadeTarget.id)
+    await refreshClients()
+    setCascadeBusy(false)
+    setCascadeTarget(null)
+    if (result.ok) {
+      toast.success(t.payers.payerCascadeDeleted.replace("{count}", String(result.deletedClients)))
+    } else {
+      toast.error(t.payers.importErrorTitle)
+    }
   }
 
   return (
@@ -163,6 +188,26 @@ export function PayersTable() {
           </Empty>
         ) : null}
       </div>
+
+      <Dialog open={!!cascadeTarget} onOpenChange={(open) => !open && setCascadeTarget(null)}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>{t.payers.cascadeDeleteTitle}</DialogTitle>
+            <DialogDescription>
+              {t.payers.cascadeDeleteDescription.replace(
+                "{names}",
+                cascadeTarget?.names.join(", ") ?? "",
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <DialogClose render={<Button variant="outline">{t.common.cancel}</Button>} />
+            <Button variant="destructive" onClick={handleCascadeConfirm} disabled={cascadeBusy}>
+              {t.payers.cascadeDeleteConfirm}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

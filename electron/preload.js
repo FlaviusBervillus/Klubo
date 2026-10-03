@@ -24,6 +24,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
     createPayer: (payer) => ipcRenderer.invoke("db:createPayer", payer),
     updatePayer: (id, patch) => ipcRenderer.invoke("db:updatePayer", id, patch),
     deletePayer: (id) => ipcRenderer.invoke("db:deletePayer", id),
+    deletePayerCascade: (id) => ipcRenderer.invoke("db:deletePayerCascade", id),
     ensurePayerForClient: (clientId) => ipcRenderer.invoke("db:ensurePayerForClient", clientId),
     analyzeExcelImport: () => ipcRenderer.invoke("clients:analyze-excel-import"),
     applyExcelImport: (items, decisions) =>
@@ -69,6 +70,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
     createSeason: (season) => ipcRenderer.invoke("db:createSeason", season),
     updateSeason: (id, patch) => ipcRenderer.invoke("db:updateSeason", id, patch),
     deleteSeason: (id) => ipcRenderer.invoke("db:deleteSeason", id),
+    deleteSeasonCascade: (id) => ipcRenderer.invoke("db:deleteSeasonCascade", id),
     getClientSeasonMap: (seasonId) => ipcRenderer.invoke("db:getClientSeasonMap", seasonId),
     setClientSeason: (clientId, seasonId, payload) =>
       ipcRenderer.invoke("db:setClientSeason", clientId, seasonId, payload),

@@ -39,6 +39,7 @@ function normalizeHeader(value) {
 const HEADER_MAP = {
   nom: "lastName",
   prenom: "firstName",
+  saison: "season",
   categorie: "category",
   discipline: "category", // colonne plus spécifique que "categorie" quand les deux existent (ex. export Notion) : voir le filtrage "valeur non vide" dans parseRows, qui la fait primer
   email: "email",
@@ -139,6 +140,7 @@ async function parseExcelFile(filePath) {
       city: String(data.city || "").trim(),
       birthDate: parseBirthDate(data.birthDate),
       category: data.category ? String(data.category).trim() : "",
+      season: data.season ? String(data.season).trim() : "",
       // Représentant légal (parent/tuteur) : utilisé uniquement pour proposer un lien
       // tuteur/enfant à la vérification — ne touche jamais au statut/cours de qui que ce soit.
       guardianFirstName: String(data.guardianFirstName || "").trim(),
@@ -313,15 +315,43 @@ function applyImport(items, decisions) {
   let updated = 0
   let skipped = 0
 
-  // Un client importé doit apparaître dans l'effectif de la saison active (les saisons démarrent
-  // vides) : on l'y inscrit automatiquement s'il n'y est pas déjà, sans jamais toucher à celles où il l'est déjà.
+  // Un client importé doit apparaître dans l'effectif d'une saison (les saisons démarrent
+  // vides) : s'il vient d'une ligne qui précise sa saison (ex. colonne "Saison" d'un export
+  // Notion), on l'inscrit/le met à jour sur CETTE saison précisément (recherchée par libellé, ou
+  // créée au besoin) ; sinon on retombe sur l'ancien comportement : inscription dans la saison
+  // active si pas déjà présent, sans jamais écraser une saison où il est déjà inscrit.
   const settings = db.getSettings()
   const activeSeasonId = settings.activeSeasonId || null
-  const existingSeasonRoster = activeSeasonId ? db.getClientSeasonMap(activeSeasonId) : {}
+  const seasonRosterCache = new Map()
 
-  function enrollInActiveSeasonIfNeeded(clientId, status) {
-    if (!activeSeasonId || clientId in existingSeasonRoster) return
+  function rosterFor(seasonId) {
+    if (!seasonRosterCache.has(seasonId)) {
+      seasonRosterCache.set(seasonId, db.getClientSeasonMap(seasonId))
+    }
+    return seasonRosterCache.get(seasonId)
+  }
+
+  function enrollForItem(item, clientId, status) {
+    if (item.season) {
+      const season = db.findOrCreateSeasonByLabel(item.season)
+      const roster = rosterFor(season.id)
+      const paid = roster[clientId]?.paid ?? false
+      db.setClientSeason(clientId, season.id, { status: status || "Non catégorisé", paid })
+      roster[clientId] = { status: status || "Non catégorisé", paid }
+      db.addImportBatchChange({
+        id: crypto.randomUUID(),
+        batchId,
+        clientId,
+        kind: "enroll",
+        previousJson: JSON.stringify({ seasonId: season.id }),
+      })
+      return
+    }
+    if (!activeSeasonId) return
+    const roster = rosterFor(activeSeasonId)
+    if (clientId in roster) return
     db.setClientSeason(clientId, activeSeasonId, { status: status || "Non catégorisé", paid: false })
+    roster[clientId] = { status: status || "Non catégorisé", paid: false }
     db.addImportBatchChange({
       id: crypto.randomUUID(),
       batchId,
@@ -342,7 +372,7 @@ function applyImport(items, decisions) {
       rowIndexToClientId[item.rowIndex] = item.matchedClientId
       const patch = item.patch || {}
       if (Object.keys(patch).length === 0) {
-        enrollInActiveSeasonIfNeeded(item.matchedClientId, item.existingSnapshot?.status)
+        enrollForItem(item, item.matchedClientId, item.existingSnapshot?.status)
         skipped++
         continue
       }
@@ -357,7 +387,7 @@ function applyImport(items, decisions) {
         kind: "update",
         previousJson: JSON.stringify(previous),
       })
-      enrollInActiveSeasonIfNeeded(item.matchedClientId, patch.status || before.status)
+      enrollForItem(item, item.matchedClientId, patch.status || before.status)
       updated++
     } else {
       const id = `import_${crypto.randomUUID()}`
@@ -376,7 +406,7 @@ function applyImport(items, decisions) {
         paid: false,
       })
       db.addImportBatchChange({ id: crypto.randomUUID(), batchId, clientId: id, kind: "create", previousJson: null })
-      enrollInActiveSeasonIfNeeded(id, item.courseType)
+      enrollForItem(item, id, item.courseType)
       rowIndexToClientId[item.rowIndex] = id
       created++
     }

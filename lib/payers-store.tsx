@@ -55,6 +55,7 @@ const PayersContext = createContext<{
   addPayer: (input: NewPayer) => Promise<{ ok: true; id: string } | { ok: false; error?: string }>
   updatePayer: (id: string, patch: Partial<NewPayer>) => Promise<void>
   deletePayer: (id: string) => Promise<void>
+  deletePayerCascade: (id: string) => Promise<{ ok: true; deletedClients: number } | { ok: false }>
   ensurePayerForClient: (clientId: string) => Promise<string | null>
   refresh: () => Promise<void>
 } | null>(null)
@@ -101,6 +102,14 @@ export function PayersProvider({ children }: { children: React.ReactNode }) {
     await refresh()
   }
 
+  async function deletePayerCascade(id: string) {
+    const electronApi = api()
+    if (!electronApi) return { ok: false as const }
+    const result = await electronApi.db.deletePayerCascade(id)
+    await refresh()
+    return result
+  }
+
   async function ensurePayerForClient(clientId: string) {
     const electronApi = api()
     if (!electronApi) return null
@@ -111,7 +120,17 @@ export function PayersProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <PayersContext.Provider
-      value={{ payers, loaded, available, addPayer, updatePayer, deletePayer, ensurePayerForClient, refresh }}
+      value={{
+        payers,
+        loaded,
+        available,
+        addPayer,
+        updatePayer,
+        deletePayer,
+        deletePayerCascade,
+        ensurePayerForClient,
+        refresh,
+      }}
     >
       {children}
     </PayersContext.Provider>

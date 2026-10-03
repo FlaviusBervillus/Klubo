@@ -33,6 +33,12 @@ const SeasonsContext = createContext<{
   createSeason: (input: { label: string; startDate: string; endDate: string }) => Promise<void>
   updateSeason: (id: string, patch: Partial<{ label: string; startDate: string; endDate: string }>) => Promise<void>
   deleteSeason: (id: string) => Promise<void>
+  deleteSeasonCascade: (
+    id: string,
+  ) => Promise<
+    | { ok: true; deletedTransactions: number; deletedClients: number; deletedPayers: number }
+    | { ok: false; error?: string }
+  >
 } | null>(null)
 
 export function SeasonsProvider({ children }: { children: React.ReactNode }) {
@@ -101,6 +107,20 @@ export function SeasonsProvider({ children }: { children: React.ReactNode }) {
     await refresh()
   }
 
+  async function deleteSeasonCascade(id: string) {
+    const electronApi = api()
+    if (!electronApi) return { ok: false as const, error: undefined }
+    const result = await electronApi.db.deleteSeasonCascade(id)
+    if (result.ok) {
+      if (activeSeasonId === id) {
+        const remaining = seasons.filter((s) => s.id !== id)
+        await setActiveSeasonId(remaining[0]?.id ?? "")
+      }
+      await refresh()
+    }
+    return result
+  }
+
   const activeSeason = seasons.find((s) => s.id === activeSeasonId) ?? null
 
   return (
@@ -114,6 +134,7 @@ export function SeasonsProvider({ children }: { children: React.ReactNode }) {
         createSeason,
         updateSeason,
         deleteSeason,
+        deleteSeasonCascade,
       }}
     >
       {children}

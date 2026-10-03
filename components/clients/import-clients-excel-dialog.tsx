@@ -257,6 +257,7 @@ export function ImportClientsExcelDialog() {
                   <TableHead>{t.clients.colPostalCode}</TableHead>
                   <TableHead>{t.clients.colCity}</TableHead>
                   <TableHead>{t.clients.colStatus}</TableHead>
+                  <TableHead>{t.seasons.label}</TableHead>
                   <TableHead>{t.clients.importActionHeader}</TableHead>
                   <TableHead className="min-w-48">{t.clients.importGuardianLabel}</TableHead>
                 </TableRow>
@@ -289,6 +290,7 @@ export function ImportClientsExcelDialog() {
                       <TableCell className="whitespace-nowrap">
                         {item.courseType ? t.courseTypes[item.courseType as keyof typeof t.courseTypes] ?? item.courseType : "—"}
                       </TableCell>
+                      <TableCell className="whitespace-nowrap">{item.season || "—"}</TableCell>
                       <TableCell className="whitespace-nowrap">
                         {item.kind === "create" ? (
                           <Badge variant="outline">{t.clients.importActionNew}</Badge>

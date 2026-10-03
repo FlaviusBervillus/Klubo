@@ -115,6 +115,7 @@ ipcMain.handle("db:createPayer", (_e, payer) => {
 })
 ipcMain.handle("db:updatePayer", (_e, id, patch) => db.updatePayer(id, patch))
 ipcMain.handle("db:deletePayer", (_e, id) => db.deletePayer(id))
+ipcMain.handle("db:deletePayerCascade", (_e, id) => db.deletePayerCascade(id))
 ipcMain.handle("db:ensurePayerForClient", (_e, clientId) => db.ensurePayerForClient(clientId))
 
 ipcMain.handle("clients:analyze-excel-import", async () => {
@@ -210,6 +211,7 @@ ipcMain.handle("db:createSeason", (_e, season) => {
 })
 ipcMain.handle("db:updateSeason", (_e, id, patch) => db.updateSeason(id, patch))
 ipcMain.handle("db:deleteSeason", (_e, id) => db.deleteSeason(id))
+ipcMain.handle("db:deleteSeasonCascade", (_e, id) => db.deleteSeasonCascade(id))
 ipcMain.handle("db:getClientSeasonMap", (_e, seasonId) => db.getClientSeasonMap(seasonId))
 ipcMain.handle("db:setClientSeason", (_e, clientId, seasonId, payload) =>
   db.setClientSeason(clientId, seasonId, payload),

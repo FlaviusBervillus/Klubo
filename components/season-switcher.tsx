@@ -25,8 +25,18 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { useClientsStore } from "@/lib/clients-store"
+import { usePayersStore } from "@/lib/payers-store"
 import { useSeasons, type Season } from "@/lib/seasons-store"
 import { useTranslation } from "@/lib/i18n/context"
+
+const CASCADE_DELETE_MIN_AGE_YEARS = 5
+
+function isSeasonOldEnoughToCascadeDelete(season: Season) {
+  const minEndDate = new Date()
+  minEndDate.setFullYear(minEndDate.getFullYear() - CASCADE_DELETE_MIN_AGE_YEARS)
+  return season.endDate <= minEndDate.toISOString().slice(0, 10)
+}
 
 function SeasonFormDialog({
   season,
@@ -38,12 +48,17 @@ function SeasonFormDialog({
   onOpenChange: (open: boolean) => void
 }) {
   const { t } = useTranslation()
-  const { createSeason, updateSeason, deleteSeason } = useSeasons()
+  const { createSeason, updateSeason, deleteSeason, deleteSeasonCascade } = useSeasons()
+  const { refresh: refreshClients } = useClientsStore()
+  const { refresh: refreshPayers } = usePayersStore()
   const isEdit = !!season
   const [label, setLabel] = useState("")
   const [startDate, setStartDate] = useState("")
   const [endDate, setEndDate] = useState("")
   const [confirmingDelete, setConfirmingDelete] = useState(false)
+  const [cascadeMode, setCascadeMode] = useState(false)
+  const [cascadeTypedLabel, setCascadeTypedLabel] = useState("")
+  const [cascadeBusy, setCascadeBusy] = useState(false)
 
   useEffect(() => {
     if (open) {
@@ -51,6 +66,8 @@ function SeasonFormDialog({
       setStartDate(season?.startDate ?? "")
       setEndDate(season?.endDate ?? "")
       setConfirmingDelete(false)
+      setCascadeMode(false)
+      setCascadeTypedLabel("")
     }
   }, [open, season])
 
@@ -71,6 +88,25 @@ function SeasonFormDialog({
     await deleteSeason(season.id)
     toast.success(t.seasons.deleted)
     onOpenChange(false)
+  }
+
+  async function handleCascadeDelete() {
+    if (!season || cascadeTypedLabel.trim() !== season.label.trim()) return
+    setCascadeBusy(true)
+    const result = await deleteSeasonCascade(season.id)
+    await Promise.all([refreshClients(), refreshPayers()])
+    setCascadeBusy(false)
+    if (result.ok) {
+      toast.success(
+        t.seasons.cascadeDeleteSuccess
+          .replace("{transactions}", String(result.deletedTransactions))
+          .replace("{clients}", String(result.deletedClients))
+          .replace("{payers}", String(result.deletedPayers)),
+      )
+      onOpenChange(false)
+    } else {
+      toast.error(result.error || t.seasons.cascadeDeleteTooRecent)
+    }
   }
 
   return (
@@ -140,6 +176,67 @@ function SeasonFormDialog({
                 >
                   <Trash2Icon data-icon="inline-start" />
                   {t.seasons.delete}
+                </Button>
+              )}
+            </div>
+          ) : null}
+
+          {isEdit && season ? (
+            <div className="mb-2 flex flex-col gap-2 rounded-lg border border-destructive/30 bg-destructive/5 p-3">
+              {cascadeMode ? (
+                <>
+                  <p className="text-xs text-destructive">
+                    {t.seasons.cascadeDeleteDescription.replace("{season}", season.label)}
+                  </p>
+                  {isSeasonOldEnoughToCascadeDelete(season) ? (
+                    <>
+                      <Field>
+                        <FieldLabel htmlFor="season-cascade-confirm" className="text-xs">
+                          {t.seasons.cascadeDeleteTypeLabel}
+                        </FieldLabel>
+                        <Input
+                          id="season-cascade-confirm"
+                          value={cascadeTypedLabel}
+                          onChange={(e) => setCascadeTypedLabel(e.target.value)}
+                          placeholder={t.seasons.cascadeDeleteConfirmPlaceholder}
+                        />
+                      </Field>
+                      <div className="flex justify-end gap-2">
+                        <Button type="button" variant="ghost" size="sm" onClick={() => setCascadeMode(false)}>
+                          {t.common.cancel}
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="destructive"
+                          size="sm"
+                          disabled={cascadeTypedLabel.trim() !== season.label.trim() || cascadeBusy}
+                          onClick={handleCascadeDelete}
+                        >
+                          {t.seasons.cascadeDeleteConfirmButton}
+                        </Button>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <p className="text-xs text-destructive">{t.seasons.cascadeDeleteTooRecent}</p>
+                      <div className="flex justify-end">
+                        <Button type="button" variant="ghost" size="sm" onClick={() => setCascadeMode(false)}>
+                          {t.common.cancel}
+                        </Button>
+                      </div>
+                    </>
+                  )}
+                </>
+              ) : (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="justify-start text-destructive"
+                  onClick={() => setCascadeMode(true)}
+                >
+                  <Trash2Icon data-icon="inline-start" />
+                  {t.seasons.cascadeDeleteButton}
                 </Button>
               )}
             </div>

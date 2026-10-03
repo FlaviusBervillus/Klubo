@@ -55,6 +55,7 @@ export interface ImportPlanItem {
   city: string
   birthDate: string | null
   category: string
+  season: string
   courseType: string | null
   kind: "create" | "update"
   matchedClientId: string | null
@@ -195,6 +196,7 @@ declare global {
         ) => Promise<{ ok: true; id: string } | { ok: false; error?: string }>
         updatePayer: (id: string, patch: Record<string, unknown>) => Promise<void>
         deletePayer: (id: string) => Promise<void>
+        deletePayerCascade: (id: string) => Promise<{ ok: true; deletedClients: number }>
         ensurePayerForClient: (clientId: string) => Promise<string | null>
 
         analyzeExcelImport: () => Promise<
@@ -255,6 +257,10 @@ declare global {
           patch: Partial<{ label: string; startDate: string; endDate: string }>,
         ) => Promise<void>
         deleteSeason: (id: string) => Promise<void>
+        deleteSeasonCascade: (id: string) => Promise<
+          | { ok: true; deletedTransactions: number; deletedClients: number; deletedPayers: number }
+          | { ok: false; error?: string }
+        >
         getClientSeasonMap: (
           seasonId: string,
         ) => Promise<Record<string, { status: string; paid: boolean }>>

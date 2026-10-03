@@ -561,6 +561,14 @@ export interface Dictionary {
     end: string
     created: string
     allTime: string
+    cascadeDeleteButton: string
+    cascadeDeleteTitle: string
+    cascadeDeleteDescription: string
+    cascadeDeleteTooRecent: string
+    cascadeDeleteTypeLabel: string
+    cascadeDeleteConfirmPlaceholder: string
+    cascadeDeleteConfirmButton: string
+    cascadeDeleteSuccess: string
   }
   disciplines: {
     title: string
@@ -595,8 +603,11 @@ export interface Dictionary {
     noLinkedAdherent: string
     payerSaved: string
     payerDeleted: string
+    payerCascadeDeleted: string
     noPayers: string
-    deleteBlockedLinked: string
+    cascadeDeleteTitle: string
+    cascadeDeleteDescription: string
+    cascadeDeleteConfirm: string
     importErrorTitle: string
   }
   materiel: {
