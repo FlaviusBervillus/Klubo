@@ -179,3 +179,23 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* Impression des rapports (ex. Rapport comptable) : masque la navigation de l'app pour n'imprimer
+ * que le contenu du rapport, sur fond blanc quel que soit le thème actif. */
+@media print {
+  [data-slot="sidebar-container"],
+  [data-slot="sidebar-gap"],
+  [data-slot="sidebar-rail"] {
+    display: none !important;
+  }
+  [data-slot="sidebar-inset"] {
+    margin: 0 !important;
+  }
+  main {
+    padding: 0 !important;
+  }
+  body {
+    background: white !important;
+    color: black !important;
+  }
+}

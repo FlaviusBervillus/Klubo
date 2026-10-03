@@ -13,7 +13,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
-import { Separator } from "@/components/ui/separator"
 import {
   Table,
   TableBody,
@@ -22,18 +21,14 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import {
-  computeCaisseBanque,
-  computeCategoryTotals,
-  computeReportANouveau,
-  computeResultExercice,
-} from "@/lib/dashboard-stats"
-import { sumNetBookValue, sumPeriodDotation } from "@/lib/depreciation"
+import { computeExerciceSummary, findPriorSeason, type ExerciceSummary } from "@/lib/accounting-summary"
+import { sumNetBookValue } from "@/lib/depreciation"
 import { useDebtsStore } from "@/lib/debts-store"
 import { useFixedAssetsStore } from "@/lib/fixed-assets-store"
 import { useTranslation } from "@/lib/i18n/context"
+import { useClubSettings } from "@/lib/club-settings"
 import { formatEuro, type Category } from "@/lib/mock-data"
-import { useSeasons, useSeasonTransactions } from "@/lib/seasons-store"
+import { useSeasons } from "@/lib/seasons-store"
 import { useTransactionsStore } from "@/lib/transactions-store"
 import { ManageDebtsDialog } from "@/components/rapports/manage-debts-dialog"
 import { ManageFixedAssetsDialog } from "@/components/rapports/manage-fixed-assets-dialog"
@@ -45,29 +40,89 @@ interface GocardlessAccountBalance {
   currency: string
 }
 
-function Line({
-  label,
-  value,
-  bold = false,
-}: {
+interface LedgerRow {
   label: string
-  value: string
-  bold?: boolean
+  n?: number | null
+  n1?: number | null
+  variant?: "section" | "item" | "subtotal" | "total"
+  signed?: boolean
+}
+
+function formatCell(value: number | null | undefined, signed?: boolean) {
+  if (value == null) return "—"
+  if (value === 0) return "—"
+  return formatEuro(value, signed ? { signed: true } : undefined)
+}
+
+function LedgerTable({
+  rows,
+  nLabel,
+  n1Label,
+}: {
+  rows: LedgerRow[]
+  nLabel: string
+  n1Label?: string
 }) {
+  const colSpan = n1Label ? 3 : 2
   return (
-    <div className={`flex items-center justify-between gap-4 py-2 ${bold ? "" : "border-b border-dashed"}`}>
-      <span className="text-sm">{label}</span>
-      <span className={`font-mono tabular-nums ${bold ? "text-base font-semibold" : "text-sm"}`}>
-        {value}
-      </span>
-    </div>
+    <Table>
+      <TableHeader>
+        <TableRow className="bg-muted/50">
+          <TableHead>Postes</TableHead>
+          <TableHead className="text-right">{nLabel}</TableHead>
+          {n1Label ? <TableHead className="text-right">{n1Label}</TableHead> : null}
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {rows.map((row, i) => {
+          if (row.variant === "section") {
+            return (
+              <TableRow key={i} className="hover:bg-transparent">
+                <TableCell
+                  colSpan={colSpan}
+                  className="pt-3 text-xs font-semibold tracking-wide text-muted-foreground uppercase"
+                >
+                  {row.label}
+                </TableCell>
+              </TableRow>
+            )
+          }
+          const isTotal = row.variant === "total"
+          const isSubtotal = row.variant === "subtotal"
+          return (
+            <TableRow
+              key={i}
+              className={
+                isTotal
+                  ? "bg-destructive/10 font-semibold"
+                  : isSubtotal
+                    ? "bg-muted/40 font-medium"
+                    : ""
+              }
+            >
+              <TableCell className={isSubtotal || isTotal ? "" : "pl-4 text-muted-foreground"}>
+                {row.label}
+              </TableCell>
+              <TableCell className="text-right font-mono tabular-nums">
+                {formatCell(row.n, row.signed)}
+              </TableCell>
+              {n1Label ? (
+                <TableCell className="text-right font-mono tabular-nums text-muted-foreground">
+                  {formatCell(row.n1, row.signed)}
+                </TableCell>
+              ) : null}
+            </TableRow>
+          )
+        })}
+      </TableBody>
+    </Table>
   )
 }
 
 export function AccountingReport() {
   const { t } = useTranslation()
-  const { activeSeason } = useSeasons()
-  const seasonTransactions = useSeasonTransactions()
+  const { settings } = useClubSettings()
+  const { seasons, activeSeason } = useSeasons()
   const { transactions: allTransactions } = useTransactionsStore()
   const { assets } = useFixedAssetsStore()
   const { debts } = useDebtsStore()
@@ -76,8 +131,8 @@ export function AccountingReport() {
   useEffect(() => {
     const electronApi = typeof window !== "undefined" ? window.electronAPI : undefined
     if (!electronApi) return
-    electronApi.db.getSettings().then((settings) => {
-      const raw = settings.gocardlessBalances
+    electronApi.db.getSettings().then((settingsRow) => {
+      const raw = settingsRow.gocardlessBalances
       if (!raw) return
       try {
         const parsed = JSON.parse(raw) as { accounts: GocardlessAccountBalance[] }
@@ -88,66 +143,50 @@ export function AccountingReport() {
     })
   }, [])
 
-  const periodEnd = activeSeason ? new Date(activeSeason.endDate) : new Date()
-  const periodStart = activeSeason ? new Date(activeSeason.startDate) : new Date(0)
+  const priorSeason = useMemo(() => findPriorSeason(seasons, activeSeason), [seasons, activeSeason])
+
+  const current = useMemo(
+    () => computeExerciceSummary(activeSeason, allTransactions, assets),
+    [activeSeason, allTransactions, assets],
+  )
+  const prior: ExerciceSummary | null = useMemo(
+    () => (priorSeason ? computeExerciceSummary(priorSeason, allTransactions, assets) : null),
+    [priorSeason, allTransactions, assets],
+  )
 
   const activeAssets = useMemo(() => assets.filter((a) => !a.disposed), [assets])
-  const dotationPeriode = useMemo(
-    () => sumPeriodDotation(activeAssets, periodStart, periodEnd),
-    [activeAssets, periodStart, periodEnd],
-  )
-  const immobilisationsNettes = useMemo(
-    () => sumNetBookValue(activeAssets, periodEnd),
-    [activeAssets, periodEnd],
-  )
-  const totalDettes = useMemo(
-    () => debts.filter((d) => !d.settled).reduce((sum, d) => sum + d.amount, 0),
-    [debts],
-  )
+  const unsettledDebts = useMemo(() => debts.filter((d) => !d.settled), [debts])
+  const totalDettes = unsettledDebts.reduce((sum, d) => sum + d.amount, 0)
 
-  const { produits, charges: chargesCourantes } = useMemo(
-    () => computeResultExercice(seasonTransactions),
-    [seasonTransactions],
-  )
-  const charges = chargesCourantes + dotationPeriode
-  const resultat = produits - charges
+  // Une fois GoCardless configuré, on préfère le solde bancaire réel (par compte, ex. Livret A) à
+  // l'estimation calculée depuis les transactions enregistrées manuellement — mais uniquement pour
+  // l'exercice en cours : on n'a pas de solde bancaire réel historisé pour un exercice passé.
+  const banqueReelle = gocardlessAccounts ? gocardlessAccounts.reduce((sum, a) => sum + a.amount, 0) : null
+  const disponibilitesActif = banqueReelle != null ? current.caisse + banqueReelle : current.disponibilites
+  const totalActif = disponibilitesActif + current.immobilisationsNettes
+  const totalActifN1 = prior ? prior.totalActif : null
 
-  const produitsParCategorie = useMemo(
-    () => computeCategoryTotals(seasonTransactions, "entree"),
-    [seasonTransactions],
-  )
-  const chargesParCategorie = useMemo(
-    () => computeCategoryTotals(seasonTransactions, "sortie"),
-    [seasonTransactions],
-  )
+  const totalCapitauxPropres = current.reportANouveau + current.resultat
+  const totalCapitauxPropresN1 = prior ? prior.reportANouveau + prior.resultat : null
+  const totalPassif = totalCapitauxPropres + totalDettes
+  const totalPassifN1 = prior ? totalCapitauxPropresN1! : null // dettes non historisées par exercice (voir note)
 
-  const reportANouveau = useMemo(() => {
-    if (!activeSeason) return 0
-    return computeReportANouveau(allTransactions, activeSeason.startDate)
-  }, [allTransactions, activeSeason])
-
-  const { caisse, banque: banqueEstimee } = useMemo(() => {
-    const cumulated = activeSeason
-      ? allTransactions.filter((tx) => new Date(tx.date) <= periodEnd)
-      : allTransactions
-    return computeCaisseBanque(cumulated)
-  }, [allTransactions, activeSeason, periodEnd])
-
-  // Une fois GoCardless configuré, on préfère le solde bancaire réel (par compte, ex. Livret A)
-  // à l'estimation calculée depuis les transactions enregistrées manuellement.
-  const banque = gocardlessAccounts
-    ? gocardlessAccounts.reduce((sum, a) => sum + a.amount, 0)
-    : banqueEstimee
-
-  const disponibilites = caisse + banque
-  const totalActif = disponibilites + immobilisationsNettes
-  const totalPassif = totalDettes + reportANouveau + resultat
   const ecart = totalActif - totalPassif
   const balanced = Math.abs(ecart) < 0.01
 
+  const nLabel = activeSeason?.label ?? t.seasons.allTime
+  const n1Label = prior?.periodLabel
+
+  function fmtVar(n: number, n1: number | null) {
+    if (n1 == null || n1 === 0) return "—"
+    const diff = n - n1
+    const pct = (diff / Math.abs(n1)) * 100
+    return `${formatEuro(diff, { signed: true })} (${pct >= 0 ? "+" : ""}${pct.toFixed(0)}%)`
+  }
+
   return (
-    <div className="flex flex-col gap-6">
-      <div className="flex flex-wrap items-start justify-between gap-3">
+    <div className="flex flex-col gap-6 print:gap-4">
+      <div className="flex flex-wrap items-start justify-between gap-3 print:hidden">
         <Alert className="flex-1">
           <InfoIcon />
           <AlertTitle>{t.accounting.periodLabel}</AlertTitle>
@@ -159,10 +198,17 @@ export function AccountingReport() {
         </Button>
       </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="hidden flex-col gap-0.5 border-b pb-3 print:flex">
+        <h1 className="text-xl font-semibold">{settings.name}</h1>
         <p className="text-sm text-muted-foreground">
-          {t.accounting.periodLabel} :{" "}
-          <span className="font-medium text-foreground">{activeSeason?.label ?? t.seasons.allTime}</span>
+          {t.accounting.compteResultatTitle} / {t.accounting.bilanTitle} — {t.accounting.periodLabel} :{" "}
+          {activeSeason?.label ?? t.seasons.allTime}
+        </p>
+      </div>
+
+      <div className="flex flex-wrap items-center justify-between gap-3 print:hidden">
+        <p className="text-sm text-muted-foreground">
+          {t.accounting.periodLabel} : <span className="font-medium text-foreground">{nLabel}</span>
         </p>
         <div className="flex flex-wrap gap-2">
           <ManageFixedAssetsDialog />
@@ -171,141 +217,306 @@ export function AccountingReport() {
       </div>
 
       {/* Compte de résultat */}
-      <Card>
+      <Card className="break-inside-avoid">
         <CardHeader>
           <CardTitle>{t.accounting.compteResultatTitle}</CardTitle>
           <CardDescription>{t.accounting.compteResultatSubtitle}</CardDescription>
         </CardHeader>
-        <CardContent className="flex flex-col">
-          <Line label={t.accounting.totalProduits} value={formatEuro(produits)} />
-          <Line label={t.accounting.totalCharges} value={`− ${formatEuro(charges)}`} />
-          {dotationPeriode > 0 ? (
-            <p className="pt-1 text-xs text-muted-foreground">
-              {t.accounting.dotationIncluded.replace("{amount}", formatEuro(dotationPeriode))}
-            </p>
-          ) : null}
-          <Line
-            label={t.accounting.resultatExercice}
-            value={formatEuro(resultat, { signed: true })}
-            bold
+        <CardContent className="p-0">
+          <LedgerTable
+            nLabel={nLabel}
+            n1Label={n1Label}
+            rows={[
+              { label: t.accounting.produitsExploitationSection, variant: "section" },
+              {
+                label: t.accounting.produitsLine,
+                n: current.produits,
+                n1: prior?.produits,
+              },
+              {
+                label: t.accounting.totalProduitsExploitation,
+                n: current.produits,
+                n1: prior?.produits,
+                variant: "subtotal",
+              },
+              { label: t.accounting.chargesExploitationSection, variant: "section" },
+              {
+                label: t.accounting.achatsChargesExternes,
+                n: current.chargesCourantes,
+                n1: prior?.chargesCourantes,
+              },
+              {
+                label: t.accounting.dotationLabel,
+                n: current.dotation,
+                n1: prior?.dotation,
+              },
+              {
+                label: t.accounting.totalChargesExploitation,
+                n: current.charges,
+                n1: prior?.charges,
+                variant: "subtotal",
+              },
+              {
+                label: t.accounting.resultatExploitation,
+                n: current.resultat,
+                n1: prior?.resultat,
+                variant: "subtotal",
+                signed: true,
+              },
+              {
+                label: t.accounting.resultatExerciceLine,
+                n: current.resultat,
+                n1: prior?.resultat,
+                variant: "total",
+                signed: true,
+              },
+            ]}
           />
-          <p className="pt-2 text-xs text-muted-foreground">
-            {resultat >= 0 ? t.reports.netResultPositive : t.reports.netResultNegative}
+          <p className="px-4 py-3 text-xs text-muted-foreground">
+            {current.resultat >= 0 ? t.reports.netResultPositive : t.reports.netResultNegative}
           </p>
         </CardContent>
       </Card>
 
       {/* Compte de résultat détaillé */}
-      <Card>
+      <Card className="break-inside-avoid">
         <CardHeader>
           <CardTitle>{t.accounting.compteResultatDetailTitle}</CardTitle>
           <CardDescription>{t.accounting.compteResultatDetailSubtitle}</CardDescription>
         </CardHeader>
-        <CardContent className="grid gap-6 md:grid-cols-2">
-          <div className="flex flex-col gap-2">
-            <h4 className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-              {t.accounting.produits}
-            </h4>
-            {produitsParCategorie.length === 0 ? (
-              <p className="text-sm text-muted-foreground">{t.accounting.noCategoryData}</p>
-            ) : (
-              <Table>
-                <TableBody>
-                  {produitsParCategorie.map((row) => (
+        <CardContent className="p-0">
+          <Table>
+            <TableHeader>
+              <TableRow className="bg-muted/50">
+                <TableHead>Postes</TableHead>
+                <TableHead className="text-right">{nLabel}</TableHead>
+                {n1Label ? <TableHead className="text-right">{n1Label}</TableHead> : null}
+                {n1Label ? <TableHead className="text-right">Var.</TableHead> : null}
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              <TableRow className="hover:bg-transparent">
+                <TableCell
+                  colSpan={n1Label ? 4 : 2}
+                  className="pt-3 text-xs font-semibold tracking-wide text-muted-foreground uppercase"
+                >
+                  {t.accounting.produitsExploitationSection}
+                </TableCell>
+              </TableRow>
+              {current.produitsParCategorie.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={n1Label ? 4 : 2} className="text-sm text-muted-foreground">
+                    {t.accounting.noCategoryData}
+                  </TableCell>
+                </TableRow>
+              ) : (
+                current.produitsParCategorie.map((row) => {
+                  const priorAmount =
+                    prior?.produitsParCategorie.find((p) => p.category === row.category)?.amount ?? null
+                  return (
                     <TableRow key={row.category}>
-                      <TableCell>{t.categories[row.category as Category] ?? row.category}</TableCell>
+                      <TableCell className="pl-4 text-muted-foreground">
+                        {t.categories[row.category as Category] ?? row.category}
+                      </TableCell>
                       <TableCell className="text-right font-mono tabular-nums">
                         {formatEuro(row.amount)}
                       </TableCell>
+                      {n1Label ? (
+                        <TableCell className="text-right font-mono tabular-nums text-muted-foreground">
+                          {formatCell(priorAmount)}
+                        </TableCell>
+                      ) : null}
+                      {n1Label ? (
+                        <TableCell className="text-right font-mono text-xs tabular-nums text-muted-foreground">
+                          {fmtVar(row.amount, priorAmount)}
+                        </TableCell>
+                      ) : null}
                     </TableRow>
-                  ))}
-                  <TableRow className="font-semibold">
-                    <TableCell>{t.accounting.totalProduits}</TableCell>
-                    <TableCell className="text-right font-mono tabular-nums">
-                      {formatEuro(produits)}
+                  )
+                })
+              )}
+              <TableRow className="bg-muted/40 font-medium">
+                <TableCell>{t.accounting.totalProduitsExploitation}</TableCell>
+                <TableCell className="text-right font-mono tabular-nums">
+                  {formatEuro(current.produits)}
+                </TableCell>
+                {n1Label ? (
+                  <TableCell className="text-right font-mono tabular-nums">
+                    {formatCell(prior?.produits)}
+                  </TableCell>
+                ) : null}
+                {n1Label ? <TableCell /> : null}
+              </TableRow>
+
+              <TableRow className="hover:bg-transparent">
+                <TableCell
+                  colSpan={n1Label ? 4 : 2}
+                  className="pt-3 text-xs font-semibold tracking-wide text-muted-foreground uppercase"
+                >
+                  {t.accounting.chargesExploitationSection}
+                </TableCell>
+              </TableRow>
+              {current.chargesParCategorie.length === 0 && current.dotation === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={n1Label ? 4 : 2} className="text-sm text-muted-foreground">
+                    {t.accounting.noCategoryData}
+                  </TableCell>
+                </TableRow>
+              ) : (
+                current.chargesParCategorie.map((row) => {
+                  const priorAmount =
+                    prior?.chargesParCategorie.find((p) => p.category === row.category)?.amount ?? null
+                  return (
+                    <TableRow key={row.category}>
+                      <TableCell className="pl-4 text-muted-foreground">
+                        {t.categories[row.category as Category] ?? row.category}
+                      </TableCell>
+                      <TableCell className="text-right font-mono tabular-nums">
+                        {formatEuro(row.amount)}
+                      </TableCell>
+                      {n1Label ? (
+                        <TableCell className="text-right font-mono tabular-nums text-muted-foreground">
+                          {formatCell(priorAmount)}
+                        </TableCell>
+                      ) : null}
+                      {n1Label ? (
+                        <TableCell className="text-right font-mono text-xs tabular-nums text-muted-foreground">
+                          {fmtVar(row.amount, priorAmount)}
+                        </TableCell>
+                      ) : null}
+                    </TableRow>
+                  )
+                })
+              )}
+              {current.dotation > 0 ? (
+                <TableRow>
+                  <TableCell className="pl-4 text-muted-foreground">{t.accounting.dotationLabel}</TableCell>
+                  <TableCell className="text-right font-mono tabular-nums">
+                    {formatEuro(current.dotation)}
+                  </TableCell>
+                  {n1Label ? (
+                    <TableCell className="text-right font-mono tabular-nums text-muted-foreground">
+                      {formatCell(prior?.dotation)}
                     </TableCell>
-                  </TableRow>
-                </TableBody>
-              </Table>
-            )}
-          </div>
-          <div className="flex flex-col gap-2">
-            <h4 className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-              {t.accounting.charges}
-            </h4>
-            {chargesParCategorie.length === 0 && dotationPeriode === 0 ? (
-              <p className="text-sm text-muted-foreground">{t.accounting.noCategoryData}</p>
-            ) : (
-              <Table>
-                <TableBody>
-                  {chargesParCategorie.map((row) => (
-                    <TableRow key={row.category}>
-                      <TableCell>{t.categories[row.category as Category] ?? row.category}</TableCell>
-                      <TableCell className="text-right font-mono tabular-nums">
-                        {formatEuro(row.amount)}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                  {dotationPeriode > 0 ? (
-                    <TableRow>
-                      <TableCell>{t.accounting.dotationLabel}</TableCell>
-                      <TableCell className="text-right font-mono tabular-nums">
-                        {formatEuro(dotationPeriode)}
-                      </TableCell>
-                    </TableRow>
                   ) : null}
-                  <TableRow className="font-semibold">
-                    <TableCell>{t.accounting.totalCharges}</TableCell>
-                    <TableCell className="text-right font-mono tabular-nums">
-                      {formatEuro(charges)}
-                    </TableCell>
-                  </TableRow>
-                </TableBody>
-              </Table>
-            )}
-          </div>
+                  {n1Label ? <TableCell /> : null}
+                </TableRow>
+              ) : null}
+              <TableRow className="bg-muted/40 font-medium">
+                <TableCell>{t.accounting.totalChargesExploitation}</TableCell>
+                <TableCell className="text-right font-mono tabular-nums">
+                  {formatEuro(current.charges)}
+                </TableCell>
+                {n1Label ? (
+                  <TableCell className="text-right font-mono tabular-nums">
+                    {formatCell(prior?.charges)}
+                  </TableCell>
+                ) : null}
+                {n1Label ? <TableCell /> : null}
+              </TableRow>
+              <TableRow className="bg-destructive/10 font-semibold">
+                <TableCell>{t.accounting.resultatExerciceLine}</TableCell>
+                <TableCell className="text-right font-mono tabular-nums">
+                  {formatEuro(current.resultat, { signed: true })}
+                </TableCell>
+                {n1Label ? (
+                  <TableCell className="text-right font-mono tabular-nums">
+                    {prior ? formatEuro(prior.resultat, { signed: true }) : "—"}
+                  </TableCell>
+                ) : null}
+                {n1Label ? <TableCell /> : null}
+              </TableRow>
+            </TableBody>
+          </Table>
         </CardContent>
       </Card>
 
       {/* Bilan actif / passif */}
-      <Card>
+      <Card className="break-inside-avoid">
         <CardHeader>
           <CardTitle>{t.accounting.bilanTitle}</CardTitle>
           <CardDescription>{t.accounting.bilanSubtitle}</CardDescription>
         </CardHeader>
-        <CardContent className="grid gap-6 md:grid-cols-2">
-          <div>
-            <h4 className="mb-2 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-              {t.accounting.actif}
-            </h4>
-            <Line label={t.accounting.disponibilites} value={formatEuro(disponibilites)} />
-            <Line label={t.accounting.immobilisationsNettes} value={formatEuro(immobilisationsNettes)} />
-            <Line label={t.accounting.totalActif} value={formatEuro(totalActif)} bold />
+        <CardContent className="p-0">
+          <h4 className="px-4 pt-4 pb-1 text-sm font-semibold">{t.accounting.actif}</h4>
+          <LedgerTable
+            nLabel={nLabel}
+            n1Label={n1Label}
+            rows={[
+              { label: t.accounting.immobilisationsSection, variant: "section" },
+              {
+                label: t.accounting.immobilisationsNettes,
+                n: current.immobilisationsNettes,
+                n1: prior?.immobilisationsNettes,
+              },
+              {
+                label: t.accounting.totalActifImmobilise,
+                n: current.immobilisationsNettes,
+                n1: prior?.immobilisationsNettes,
+                variant: "subtotal",
+              },
+              { label: t.accounting.actifCirculantSection, variant: "section" },
+              { label: t.accounting.disponibilites, n: disponibilitesActif, n1: prior?.disponibilites },
+              {
+                label: t.accounting.totalActifCirculant,
+                n: disponibilitesActif,
+                n1: prior?.disponibilites,
+                variant: "subtotal",
+              },
+              { label: t.accounting.totalActif, n: totalActif, n1: totalActifN1, variant: "total" },
+            ]}
+          />
+          <h4 className="px-4 pt-4 pb-1 text-sm font-semibold">{t.accounting.passif}</h4>
+          <LedgerTable
+            nLabel={nLabel}
+            n1Label={n1Label}
+            rows={[
+              { label: t.accounting.capitauxPropresSection, variant: "section" },
+              {
+                label: t.accounting.reportANouveau,
+                n: current.reportANouveau,
+                n1: prior?.reportANouveau,
+                signed: true,
+              },
+              {
+                label: t.accounting.resultatExerciceLine,
+                n: current.resultat,
+                n1: prior?.resultat,
+                signed: true,
+              },
+              {
+                label: t.accounting.totalCapitauxPropres,
+                n: totalCapitauxPropres,
+                n1: totalCapitauxPropresN1,
+                variant: "subtotal",
+                signed: true,
+              },
+              { label: t.accounting.dettesSection, variant: "section" },
+              { label: t.accounting.dettes, n: totalDettes, n1: null },
+              {
+                label: t.accounting.totalDettesLabel,
+                n: totalDettes,
+                n1: null,
+                variant: "subtotal",
+              },
+              { label: t.accounting.totalPassif, n: totalPassif, n1: totalPassifN1, variant: "total" },
+            ]}
+          />
+          <div className="px-4 py-3">
+            {balanced ? (
+              <p className="text-xs text-success dark:text-[oklch(0.74_0.14_155)]">✓ {t.accounting.balanceOk}</p>
+            ) : (
+              <p className="text-xs text-[oklch(0.55_0.15_60)] dark:text-[oklch(0.8_0.14_65)]">
+                {t.accounting.balanceGap.replace("{amount}", formatEuro(ecart, { signed: true }))}
+              </p>
+            )}
+            {n1Label ? <p className="pt-1 text-xs text-muted-foreground">{t.accounting.debtsNotHistorized}</p> : null}
           </div>
-          <div>
-            <h4 className="mb-2 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-              {t.accounting.passif}
-            </h4>
-            <Line label={t.accounting.dettes} value={formatEuro(totalDettes)} />
-            <Line label={t.accounting.reportANouveau} value={formatEuro(reportANouveau, { signed: true })} />
-            <Line label={t.accounting.resultatExerciceLine} value={formatEuro(resultat, { signed: true })} />
-            <Line label={t.accounting.totalPassif} value={formatEuro(totalPassif)} bold />
-          </div>
-        </CardContent>
-        <CardContent className="pt-0">
-          <Separator className="mb-3" />
-          {balanced ? (
-            <p className="text-xs text-success dark:text-[oklch(0.74_0.14_155)]">✓ {t.accounting.balanceOk}</p>
-          ) : (
-            <p className="text-xs text-[oklch(0.55_0.15_60)] dark:text-[oklch(0.8_0.14_65)]">
-              {t.accounting.balanceGap.replace("{amount}", formatEuro(ecart, { signed: true }))}
-            </p>
-          )}
         </CardContent>
       </Card>
 
       {/* Bilan détaillé */}
-      <Card>
+      <Card className="break-inside-avoid">
         <CardHeader>
           <CardTitle>{t.accounting.bilanDetailTitle}</CardTitle>
           <CardDescription>{t.accounting.bilanDetailSubtitle}</CardDescription>
@@ -315,51 +526,92 @@ export function AccountingReport() {
             <h4 className="mb-2 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
               {t.accounting.actif}
             </h4>
-            <Line label={t.accounting.caisse} value={formatEuro(caisse)} />
-            {gocardlessAccounts && gocardlessAccounts.length > 0 ? (
-              <>
-                {gocardlessAccounts.map((acc) => (
-                  <Line key={acc.accountId} label={acc.label} value={formatEuro(acc.amount)} />
-                ))}
-                <Badge variant="outline" className="mt-1 w-fit text-[10px] text-muted-foreground">
-                  {t.accounting.bankLive}
-                </Badge>
-              </>
-            ) : (
-              <>
-                <Line label={t.accounting.banque} value={formatEuro(banque)} />
-                <p className="pt-1 text-xs text-muted-foreground">{t.accounting.bankEstimated}</p>
-              </>
-            )}
-            {activeAssets.length > 0 ? (
-              <>
-                <Separator className="my-2" />
-                {activeAssets.map((asset) => (
-                  <Line
-                    key={asset.id}
-                    label={asset.label}
-                    value={formatEuro(sumNetBookValue([asset], periodEnd))}
-                  />
-                ))}
-              </>
-            ) : null}
-            <Line label={t.accounting.totalActif} value={formatEuro(totalActif)} bold />
+            <div className="flex flex-col">
+              <div className="flex items-center justify-between gap-4 border-b border-dashed py-2 text-sm">
+                <span>{t.accounting.caisse}</span>
+                <span className="font-mono tabular-nums">{formatEuro(current.caisse)}</span>
+              </div>
+              {gocardlessAccounts && gocardlessAccounts.length > 0 ? (
+                <>
+                  {gocardlessAccounts.map((acc) => (
+                    <div
+                      key={acc.accountId}
+                      className="flex items-center justify-between gap-4 border-b border-dashed py-2 text-sm"
+                    >
+                      <span>{acc.label}</span>
+                      <span className="font-mono tabular-nums">{formatEuro(acc.amount)}</span>
+                    </div>
+                  ))}
+                  <Badge variant="outline" className="mt-1 w-fit text-[10px] text-muted-foreground">
+                    {t.accounting.bankLive}
+                  </Badge>
+                </>
+              ) : (
+                <>
+                  <div className="flex items-center justify-between gap-4 border-b border-dashed py-2 text-sm">
+                    <span>{t.accounting.banque}</span>
+                    <span className="font-mono tabular-nums">{formatEuro(current.banque)}</span>
+                  </div>
+                  <p className="pt-1 text-xs text-muted-foreground">{t.accounting.bankEstimated}</p>
+                </>
+              )}
+              {activeAssets.length > 0 ? (
+                <>
+                  {activeAssets.map((asset) => (
+                    <div
+                      key={asset.id}
+                      className="flex items-center justify-between gap-4 border-b border-dashed py-2 text-sm"
+                    >
+                      <span>{asset.label}</span>
+                      <span className="font-mono tabular-nums">
+                        {formatEuro(sumNetBookValue([asset], current.periodEnd))}
+                      </span>
+                    </div>
+                  ))}
+                </>
+              ) : null}
+              <div className="flex items-center justify-between gap-4 py-2">
+                <span className="text-sm font-semibold">{t.accounting.totalActif}</span>
+                <span className="font-mono text-base font-semibold tabular-nums">{formatEuro(totalActif)}</span>
+              </div>
+            </div>
           </div>
           <div>
             <h4 className="mb-2 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
               {t.accounting.passif}
             </h4>
-            {debts.filter((d) => !d.settled).length > 0 ? (
-              debts
-                .filter((d) => !d.settled)
-                .map((debt) => <Line key={debt.id} label={debt.label} value={formatEuro(debt.amount)} />)
-            ) : (
-              <Line label={t.accounting.dettes} value={formatEuro(0)} />
-            )}
-            <Separator className="my-2" />
-            <Line label={t.accounting.reportANouveau} value={formatEuro(reportANouveau, { signed: true })} />
-            <Line label={t.accounting.resultatExerciceLine} value={formatEuro(resultat, { signed: true })} />
-            <Line label={t.accounting.totalPassif} value={formatEuro(totalPassif)} bold />
+            <div className="flex flex-col">
+              {unsettledDebts.length > 0 ? (
+                unsettledDebts.map((debt) => (
+                  <div
+                    key={debt.id}
+                    className="flex items-center justify-between gap-4 border-b border-dashed py-2 text-sm"
+                  >
+                    <span>{debt.label}</span>
+                    <span className="font-mono tabular-nums">{formatEuro(debt.amount)}</span>
+                  </div>
+                ))
+              ) : (
+                <div className="flex items-center justify-between gap-4 border-b border-dashed py-2 text-sm">
+                  <span>{t.accounting.dettes}</span>
+                  <span className="font-mono tabular-nums">{formatEuro(0)}</span>
+                </div>
+              )}
+              <div className="flex items-center justify-between gap-4 border-b border-dashed py-2 text-sm">
+                <span>{t.accounting.reportANouveau}</span>
+                <span className="font-mono tabular-nums">
+                  {formatEuro(current.reportANouveau, { signed: true })}
+                </span>
+              </div>
+              <div className="flex items-center justify-between gap-4 border-b border-dashed py-2 text-sm">
+                <span>{t.accounting.resultatExerciceLine}</span>
+                <span className="font-mono tabular-nums">{formatEuro(current.resultat, { signed: true })}</span>
+              </div>
+              <div className="flex items-center justify-between gap-4 py-2">
+                <span className="text-sm font-semibold">{t.accounting.totalPassif}</span>
+                <span className="font-mono text-base font-semibold tabular-nums">{formatEuro(totalPassif)}</span>
+              </div>
+            </div>
           </div>
         </CardContent>
       </Card>

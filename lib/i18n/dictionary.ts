@@ -244,6 +244,22 @@ export interface Dictionary {
     print: string
     immobilisationsNettes: string
     dettes: string
+    produitsExploitationSection: string
+    produitsLine: string
+    totalProduitsExploitation: string
+    chargesExploitationSection: string
+    achatsChargesExternes: string
+    totalChargesExploitation: string
+    resultatExploitation: string
+    immobilisationsSection: string
+    totalActifImmobilise: string
+    actifCirculantSection: string
+    totalActifCirculant: string
+    capitauxPropresSection: string
+    totalCapitauxPropres: string
+    dettesSection: string
+    totalDettesLabel: string
+    debtsNotHistorized: string
     dotationLabel: string
     dotationIncluded: string
     bankLive: string
