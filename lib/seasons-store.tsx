@@ -24,6 +24,8 @@ function rowToSeason(row: DbSeason): Season {
 
 const ACTIVE_SEASON_SETTING_KEY = "activeSeasonId"
 
+type SeasonMap = Record<string, { status: string; paid: boolean }>
+
 const SeasonsContext = createContext<{
   seasons: Season[]
   activeSeasonId: string | null
@@ -39,12 +41,22 @@ const SeasonsContext = createContext<{
     | { ok: true; deletedTransactions: number; deletedClients: number; deletedPayers: number }
     | { ok: false; error?: string }
   >
+  // Effectif (cours + payé) de la saison active — tenu ici (et non dans useSeasonClients, qui n'est
+  // qu'un hook utilitaire sans état propre) pour que toute mise à jour soit immédiatement visible
+  // partout où elle est utilisée, pas seulement dans le composant qui l'a déclenchée.
+  activeSeasonMap: SeasonMap
+  setClientSeasonInfo: (clientId: string, payload: { status: CourseType; paid: boolean }) => Promise<void>
+  removeClientFromSeason: (clientId: string) => Promise<void>
+  resetActiveSeasonClients: () => Promise<void>
+  getOtherSeasonRoster: (seasonId: string) => Promise<SeasonMap>
+  bringClientForward: (clientId: string, previousStatus: CourseType) => Promise<void>
 } | null>(null)
 
 export function SeasonsProvider({ children }: { children: React.ReactNode }) {
   const [seasons, setSeasons] = useState<Season[]>([])
   const [activeSeasonId, setActiveSeasonIdState] = useState<string | null>(null)
   const [loaded, setLoaded] = useState(false)
+  const [activeSeasonMap, setActiveSeasonMap] = useState<SeasonMap>({})
 
   async function refresh() {
     const electronApi = api()
@@ -121,6 +133,68 @@ export function SeasonsProvider({ children }: { children: React.ReactNode }) {
     return result
   }
 
+  async function reloadActiveSeasonMap() {
+    const electronApi = api()
+    if (!electronApi || !activeSeasonId) {
+      setActiveSeasonMap({})
+      return
+    }
+    const map = await electronApi.db.getClientSeasonMap(activeSeasonId)
+    setActiveSeasonMap(map)
+  }
+
+  useEffect(() => {
+    let cancelled = false
+    async function load() {
+      const electronApi = api()
+      if (!electronApi || !activeSeasonId) {
+        if (!cancelled) setActiveSeasonMap({})
+        return
+      }
+      const map = await electronApi.db.getClientSeasonMap(activeSeasonId)
+      if (!cancelled) setActiveSeasonMap(map)
+    }
+    load()
+    return () => {
+      cancelled = true
+    }
+  }, [activeSeasonId])
+
+  async function setClientSeasonInfo(clientId: string, payload: { status: CourseType; paid: boolean }) {
+    const electronApi = api()
+    if (!electronApi || !activeSeasonId) return
+    await electronApi.db.setClientSeason(clientId, activeSeasonId, payload)
+    await reloadActiveSeasonMap()
+  }
+
+  async function removeClientFromSeason(clientId: string) {
+    const electronApi = api()
+    if (!electronApi || !activeSeasonId) return
+    await electronApi.db.deleteClientSeason(clientId, activeSeasonId)
+    await reloadActiveSeasonMap()
+  }
+
+  /** Vide entièrement l'effectif de la saison active (les fiches clients elles-mêmes ne sont pas supprimées). */
+  async function resetActiveSeasonClients() {
+    const electronApi = api()
+    if (!electronApi || !activeSeasonId) return
+    await electronApi.db.resetSeasonClients(activeSeasonId)
+    await reloadActiveSeasonMap()
+  }
+
+  /** Effectif d'une AUTRE saison (ex. la précédente), pour proposer de reprendre un client déjà connu. */
+  async function getOtherSeasonRoster(seasonId: string) {
+    const electronApi = api()
+    if (!electronApi) return {}
+    return electronApi.db.getClientSeasonMap(seasonId)
+  }
+
+  /** Inscrit un client déjà connu (saison précédente) dans la saison active, en reprenant son
+   * cours d'alors comme point de départ ; le paiement repart à zéro (nouvelle saison, nouveau dû). */
+  async function bringClientForward(clientId: string, previousStatus: CourseType) {
+    await setClientSeasonInfo(clientId, { status: previousStatus, paid: false })
+  }
+
   const activeSeason = seasons.find((s) => s.id === activeSeasonId) ?? null
 
   return (
@@ -135,6 +209,12 @@ export function SeasonsProvider({ children }: { children: React.ReactNode }) {
         updateSeason,
         deleteSeason,
         deleteSeasonCascade,
+        activeSeasonMap,
+        setClientSeasonInfo,
+        removeClientFromSeason,
+        resetActiveSeasonClients,
+        getOtherSeasonRoster,
+        bringClientForward,
       }}
     >
       {children}
@@ -181,76 +261,33 @@ export function useSeasonTransactions() {
  */
 export function useSeasonClients() {
   const { clients } = useClientsStore()
-  const { activeSeasonId } = useSeasons()
-  const [seasonMap, setSeasonMap] = useState<Record<string, { status: string; paid: boolean }>>({})
+  const {
+    activeSeasonId,
+    activeSeasonMap,
+    setClientSeasonInfo,
+    removeClientFromSeason,
+    resetActiveSeasonClients,
+    getOtherSeasonRoster,
+    bringClientForward,
+  } = useSeasons()
 
-  async function reloadSeasonMap() {
-    const electronApi = api()
-    if (!electronApi || !activeSeasonId) {
-      setSeasonMap({})
-      return
-    }
-    const map = await electronApi.db.getClientSeasonMap(activeSeasonId)
-    setSeasonMap(map)
-  }
-
-  useEffect(() => {
-    let cancelled = false
-    async function load() {
-      const electronApi = api()
-      if (!electronApi || !activeSeasonId) {
-        if (!cancelled) setSeasonMap({})
-        return
-      }
-      const map = await electronApi.db.getClientSeasonMap(activeSeasonId)
-      if (!cancelled) setSeasonMap(map)
-    }
-    load()
-    return () => {
-      cancelled = true
-    }
-  }, [activeSeasonId])
-
-  const seasonClients: Client[] = activeSeasonId
-    ? clients
-        .filter((c) => c.id in seasonMap)
-        .map((c) => ({ ...c, status: seasonMap[c.id].status as CourseType, paid: seasonMap[c.id].paid }))
-    : clients
-
-  async function setClientSeasonInfo(clientId: string, payload: { status: CourseType; paid: boolean }) {
-    const electronApi = api()
-    if (!electronApi || !activeSeasonId) return
-    await electronApi.db.setClientSeason(clientId, activeSeasonId, payload)
-    await reloadSeasonMap()
-  }
-
-  async function removeClientFromSeason(clientId: string) {
-    const electronApi = api()
-    if (!electronApi || !activeSeasonId) return
-    await electronApi.db.deleteClientSeason(clientId, activeSeasonId)
-    await reloadSeasonMap()
-  }
-
-  /** Vide entièrement l'effectif de la saison active (les fiches clients elles-mêmes ne sont pas supprimées). */
-  async function resetActiveSeasonClients() {
-    const electronApi = api()
-    if (!electronApi || !activeSeasonId) return
-    await electronApi.db.resetSeasonClients(activeSeasonId)
-    await reloadSeasonMap()
-  }
-
-  /** Effectif d'une AUTRE saison (ex. la précédente), pour proposer de reprendre un client déjà connu. */
-  async function getOtherSeasonRoster(seasonId: string) {
-    const electronApi = api()
-    if (!electronApi) return {}
-    return electronApi.db.getClientSeasonMap(seasonId)
-  }
-
-  /** Inscrit un client déjà connu (saison précédente) dans la saison active, en reprenant son
-   * cours d'alors comme point de départ ; le paiement repart à zéro (nouvelle saison, nouveau dû). */
-  async function bringClientForward(clientId: string, previousStatus: CourseType) {
-    await setClientSeasonInfo(clientId, { status: previousStatus, paid: false })
-  }
+  // L'effectif (dérivé de activeSeasonMap, tenu dans SeasonsProvider — voir plus haut) est donc
+  // partagé par TOUS les composants qui appellent ce hook : une mise à jour déclenchée depuis l'un
+  // d'eux (ex. une boîte de dialogue d'édition) se reflète immédiatement dans tous les autres (ex.
+  // le tableau des adhérents), plutôt que de rester isolée dans un état local propre à l'appelant.
+  const seasonClients: Client[] = useMemo(
+    () =>
+      activeSeasonId
+        ? clients
+            .filter((c) => c.id in activeSeasonMap)
+            .map((c) => ({
+              ...c,
+              status: activeSeasonMap[c.id].status as CourseType,
+              paid: activeSeasonMap[c.id].paid,
+            }))
+        : clients,
+    [clients, activeSeasonId, activeSeasonMap],
+  )
 
   return {
     clients: seasonClients,

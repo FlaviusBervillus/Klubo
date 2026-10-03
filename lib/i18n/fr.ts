@@ -466,6 +466,11 @@ export const fr: Dictionary = {
     subtitle: "Adhérents du club, tous cours confondus.",
     editTitle: "Modifier l'adhérent",
     editSubtitle: "Mettez à jour les informations de l'adhérent.",
+    deleted: "Adhérent supprimé",
+    deleteButton: "Supprimer l'adhérent",
+    deleteConfirmTitle: "Supprimer cet adhérent ?",
+    deleteConfirmDescription:
+      "La fiche de {name} sera définitivement supprimée. Ses transactions passées ne sont pas touchées.",
     searchPlaceholder: "Rechercher (nom, email…)",
     allStatuses: "Tous les cours",
     colFirstName: "Prénom",

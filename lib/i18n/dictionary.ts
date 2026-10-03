@@ -433,6 +433,10 @@ export interface Dictionary {
     subtitle: string
     editTitle: string
     editSubtitle: string
+    deleted: string
+    deleteButton: string
+    deleteConfirmTitle: string
+    deleteConfirmDescription: string
     searchPlaceholder: string
     allStatuses: string
     colFirstName: string

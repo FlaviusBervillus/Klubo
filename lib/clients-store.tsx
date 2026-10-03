@@ -49,6 +49,7 @@ const ClientsContext = createContext<{
   available: boolean
   addClient: (input: NewClient) => Promise<void>
   updateClient: (id: string, patch: Partial<NewClient>) => Promise<void>
+  deleteClient: (id: string) => Promise<void>
   analyzeExcelImport: () => Promise<
     { ok: true; items: ImportPlanItem[] } | { ok: false; error?: string; canceled?: boolean }
   >
@@ -98,6 +99,13 @@ export function ClientsProvider({ children }: { children: React.ReactNode }) {
     await refresh()
   }
 
+  async function deleteClient(id: string) {
+    const electronApi = api()
+    if (!electronApi) return
+    await electronApi.db.deleteClient(id)
+    await refresh()
+  }
+
   async function analyzeExcelImport() {
     const electronApi = api()
     if (!electronApi) return { ok: false as const, error: undefined }
@@ -134,6 +142,7 @@ export function ClientsProvider({ children }: { children: React.ReactNode }) {
         available,
         addClient,
         updateClient,
+        deleteClient,
         analyzeExcelImport,
         applyExcelImport,
         undoImportBatch,
