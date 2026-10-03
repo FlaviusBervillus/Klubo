@@ -2,16 +2,7 @@ const crypto = require("crypto")
 const path = require("path")
 const ExcelJS = require("exceljs")
 const db = require("./db")
-
-const COURSE_TYPES = [
-  "Kung-fu Adulte",
-  "Kung-fu Ado",
-  "Kung-fu Enfant",
-  "Fitness de combat",
-  "Tai-chi",
-  "Self-défense",
-  "Non catégorisé",
-]
+const { matchCourseLabel } = require("./course-matching")
 
 /** camelCase (utilisé dans les patchs) -> colonne SQL, pour pouvoir sauvegarder la valeur
  * précédente d'un champ avant de l'écraser et ainsi permettre l'annulation d'un import. */
@@ -57,16 +48,30 @@ const HEADER_MAP = {
   prenomrepresentantlegal2: "guardianFirstName2",
 }
 
-/** Rapproche la catégorie lue dans le fichier avec une discipline connue (celles configurées sur
- * la page /disciplines, en plus des 6 historiques) — toujours relu et confirmé par l'utilisateur
- * dans l'écran de vérification avant application, donc une approximation reste sans risque ici. */
+/** Rapproche la catégorie lue dans le fichier avec une discipline connue (voir
+ * electron/course-matching.js) — toujours relu et confirmé par l'utilisateur dans l'écran de
+ * vérification avant application, donc une approximation (ou la création d'une nouvelle
+ * discipline) reste sans risque ici. */
 function matchCourseType(raw, disciplineLabels) {
-  if (!raw) return null
-  const norm = normalizeHeader(raw)
-  const candidates = [...new Set([...COURSE_TYPES, ...disciplineLabels])]
-  const exact = candidates.find((c) => normalizeHeader(c) === norm)
-  if (exact) return exact
-  return candidates.find((c) => normalizeHeader(c).includes(norm) || norm.includes(normalizeHeader(c))) || null
+  return matchCourseLabel(raw, disciplineLabels)
+}
+
+const FRENCH_MONTHS = {
+  janvier: "01",
+  février: "02",
+  fevrier: "02",
+  mars: "03",
+  avril: "04",
+  mai: "05",
+  juin: "06",
+  juillet: "07",
+  août: "08",
+  aout: "08",
+  septembre: "09",
+  octobre: "10",
+  novembre: "11",
+  décembre: "12",
+  decembre: "12",
 }
 
 function parseBirthDate(value) {
@@ -75,11 +80,18 @@ function parseBirthDate(value) {
     return value.toISOString().slice(0, 10)
   }
   const str = String(value).trim()
-  const m = str.match(/^(\d{1,2})[/.-](\d{1,2})[/.-](\d{2,4})$/)
-  if (m) {
-    let [, d, mo, y] = m
+  const numeric = str.match(/^(\d{1,2})[/.-](\d{1,2})[/.-](\d{2,4})$/)
+  if (numeric) {
+    let [, d, mo, y] = numeric
     if (y.length === 2) y = (Number(y) > 30 ? "19" : "20") + y
     return `${y.padStart(4, "0")}-${mo.padStart(2, "0")}-${d.padStart(2, "0")}`
+  }
+  // Export Notion ("29 septembre 1980") : jour, mois en toutes lettres, année.
+  const french = str.toLowerCase().match(/^(\d{1,2})\s+([a-zéû]+)\s+(\d{4})$/)
+  if (french) {
+    const [, d, moName, y] = french
+    const mo = FRENCH_MONTHS[moName]
+    if (mo) return `${y}-${mo}-${d.padStart(2, "0")}`
   }
   return str || null
 }
@@ -367,6 +379,11 @@ function applyImport(items, decisions) {
       skipped++
       continue
     }
+
+    // Garantit que le cours détecté existe comme vraie discipline (voir matchCourseType) avant de
+    // jamais l'assigner à un adhérent, pour qu'il apparaisse sur /disciplines au lieu de rester un
+    // statut invisible.
+    if (item.courseType) db.findOrCreateDisciplineByLabel(item.courseType)
 
     if (item.kind === "update") {
       rowIndexToClientId[item.rowIndex] = item.matchedClientId

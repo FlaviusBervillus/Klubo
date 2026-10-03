@@ -1,5 +1,6 @@
 const { stripeRequest } = require("./stripe-client")
 const db = require("./db")
+const { matchCourseLabel } = require("./course-matching")
 
 async function paginate(basePath, secretKey, extraQuery = "") {
   const items = []
@@ -22,17 +23,14 @@ function splitName(customer) {
   return { firstName: customer.email || "Client Stripe", lastName: "" }
 }
 
-/** Devine le cours à partir de la description de la charge (ex. "Inscription USJA Kung-fu : Fitness combat"). */
-function detectCourseType(description) {
-  if (!description) return null
-  const d = description.toLowerCase()
-  if (d.includes("fitness")) return "Fitness de combat"
-  if (d.includes("enfant")) return "Kung-fu Enfant"
-  if (d.includes("ado")) return "Kung-fu Ado"
-  if (d.includes("tai-chi") || d.includes("tai chi")) return "Tai-chi"
-  if (d.includes("self")) return "Self-défense"
-  if (d.includes("adulte")) return "Kung-fu Adulte"
-  return null
+/** Devine le cours à partir de la description de la charge (ex. "Inscription USJA Kung-fu : Fitness
+ * combat"), en le rapprochant des vraies disciplines du club (/disciplines), pas d'une liste figée
+ * — sinon un club qui a renommé ses cours depuis l'import initial ne verrait plus jamais rien se
+ * détecter automatiquement. Ne crée JAMAIS de nouvelle discipline à partir de ce texte libre (un
+ * descriptif de paiement Stripe est un texte peu fiable) : si rien de connu ne correspond, on
+ * laisse le trésorier catégoriser à la main plutôt que d'inventer une discipline bruitée. */
+function detectCourseType(description, disciplineLabels) {
+  return matchCourseLabel(description, disciplineLabels, { createIfMissing: false })
 }
 
 async function syncCustomers(secretKey) {
@@ -53,6 +51,7 @@ async function syncCustomers(secretKey) {
 
 async function syncCharges(secretKey) {
   const charges = await paginate("/v1/charges", secretKey, "&expand[]=data.balance_transaction")
+  const disciplineLabels = db.getDisciplines().map((d) => d.label)
   let imported = 0
   for (const charge of charges) {
     const bt =
@@ -92,7 +91,7 @@ async function syncCharges(secretKey) {
     }
 
     if (!failed) {
-      const courseType = detectCourseType(charge.description)
+      const courseType = detectCourseType(charge.description, disciplineLabels)
       if (charge.customer) {
         db.applyDetectedCourseType({ stripeCustomerId: charge.customer, courseType })
       } else if (charge.billing_details?.name || charge.billing_details?.email || charge.receipt_email) {

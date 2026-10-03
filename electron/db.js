@@ -1198,6 +1198,25 @@ function createDiscipline(discipline) {
     .run(discipline)
 }
 
+function findDisciplineByLabel(label) {
+  if (!label) return null
+  return getDb().prepare("SELECT * FROM disciplines WHERE lower(label) = lower(?)").get(label.trim()) ?? null
+}
+
+/** Retrouve une discipline par son libellé exact, ou la crée (tarif à 0, à ajuster ensuite sur la
+ * page /disciplines) — utilisé par l'import pour ne jamais laisser un adhérent avec un cours
+ * "deviné à vide" simplement parce que le club a renommé/ajouté une discipline depuis le dernier
+ * import : toute valeur non vide de la colonne devient une vraie discipline, jamais un statut
+ * orphelin invisible sur la page Disciplines. */
+function findOrCreateDisciplineByLabel(label) {
+  const existing = findDisciplineByLabel(label)
+  if (existing) return existing
+  const id = crypto.randomUUID()
+  const trimmed = label.trim()
+  createDiscipline({ id, label: trimmed, price: 0 })
+  return { id, label: trimmed, price: 0 }
+}
+
 function updateDiscipline(id, patch) {
   const fields = []
   const params = { id }
@@ -1279,6 +1298,8 @@ module.exports = {
   deleteEquipmentItem,
   getDisciplines,
   createDiscipline,
+  findDisciplineByLabel,
+  findOrCreateDisciplineByLabel,
   updateDiscipline,
   deleteDiscipline,
   getTransactions,

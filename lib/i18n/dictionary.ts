@@ -569,6 +569,8 @@ export interface Dictionary {
     cascadeDeleteConfirmPlaceholder: string
     cascadeDeleteConfirmButton: string
     cascadeDeleteSuccess: string
+    cardSubtitle: string
+    activeBadge: string
   }
   disciplines: {
     title: string

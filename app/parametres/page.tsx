@@ -6,6 +6,7 @@ import { ChangeVaultPassphraseDialog } from "@/components/parametres/change-vaul
 import { ClubIdentityCard } from "@/components/parametres/club-identity-card"
 import { StripeConnectCard } from "@/components/parametres/stripe-connect-card"
 import { GoCardlessCard } from "@/components/parametres/gocardless-card"
+import { SeasonsCard } from "@/components/parametres/seasons-card"
 import { BackupCard } from "@/components/parametres/backup-card"
 import { DangerZoneCard } from "@/components/parametres/danger-zone-card"
 import { VaultGate } from "@/components/parametres/vault-gate"
@@ -63,6 +64,8 @@ export default function ParametresPage() {
       </div>
 
       <ClubIdentityCard />
+
+      <SeasonsCard />
 
       <VaultGate>
         <div className="grid gap-4 lg:grid-cols-3">

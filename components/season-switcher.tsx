@@ -38,7 +38,7 @@ function isSeasonOldEnoughToCascadeDelete(season: Season) {
   return season.endDate <= minEndDate.toISOString().slice(0, 10)
 }
 
-function SeasonFormDialog({
+export function SeasonFormDialog({
   season,
   open,
   onOpenChange,

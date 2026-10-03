@@ -605,6 +605,8 @@ export const en: Dictionary = {
     cascadeDeleteConfirmPlaceholder: "Exact season name",
     cascadeDeleteConfirmButton: "Delete permanently",
     cascadeDeleteSuccess: "{transactions} transaction(s), {clients} member(s) and {payers} payer(s) permanently deleted",
+    cardSubtitle: "Manage the club's seasons, including permanent deletion.",
+    activeBadge: "Active",
   },
   disciplines: {
     title: "Disciplines",
