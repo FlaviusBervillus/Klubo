@@ -56,7 +56,7 @@ import { ReceiptPreviewDialog } from "@/components/transactions/receipt-preview-
 import { useClientsStore } from "@/lib/clients-store"
 import { clientFullName, findLinkedChildren, normalizeClientName } from "@/lib/client-payments"
 import { applyCotisationAutoMatch } from "@/lib/cotisation-matching"
-import { useCotisationPrices } from "@/lib/cotisation-prices-store"
+import { useDisciplinesStore } from "@/lib/disciplines-store"
 import { applyEquipmentAutoMatch } from "@/lib/equipment-matching"
 import { useEquipmentStore } from "@/lib/equipment-store"
 import { useClubSettings } from "@/lib/club-settings"
@@ -83,7 +83,8 @@ export function TransactionDetailView() {
   } = useTransactionsStore()
   const { clients, updateClient } = useClientsStore()
   const { setClientSeasonInfo, hasActiveSeason } = useSeasonClients()
-  const { prices } = useCotisationPrices()
+  const { disciplines } = useDisciplinesStore()
+  const prices = Object.fromEntries(disciplines.map((d) => [d.label, d.price]))
   const { items: equipmentItems, updateItem: updateEquipmentItem } = useEquipmentStore()
   const tx = getTransaction(id)
   const [previewOpen, setPreviewOpen] = useState(false)
@@ -130,7 +131,7 @@ export function TransactionDetailView() {
           result.courseUpdated
             ? t.transactions.cotisationMatchedCourse
                 .replace("{name}", result.clientName)
-                .replace("{course}", t.courseTypes[result.courseUpdated])
+                .replace("{course}", t.courseTypes[result.courseUpdated] ?? result.courseUpdated)
             : t.transactions.cotisationMatchedPaid.replace("{name}", result.clientName),
         )
       })

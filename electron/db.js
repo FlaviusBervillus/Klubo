@@ -162,6 +162,13 @@ function migrate(db) {
       notes TEXT NOT NULL DEFAULT '',
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
+
+    CREATE TABLE IF NOT EXISTS disciplines (
+      id TEXT PRIMARY KEY,
+      label TEXT NOT NULL UNIQUE,
+      price REAL NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
   `)
 
   ensureColumn(db, "clients", "address", "address TEXT NOT NULL DEFAULT ''")
@@ -175,6 +182,44 @@ function migrate(db) {
   ensureColumn(db, "transactions", "stripe_invoice_pdf_url", "stripe_invoice_pdf_url TEXT")
 
   migrateSeasonMembershipBackfill(db)
+  migrateDisciplinesBackfill(db)
+}
+
+/** Les disciplines étaient une liste fixe codée en dur ("Kung-fu Adulte", "Ado", "Enfant"…) : on la
+ * transforme en liste librement modifiable par le trésorier (ajout, suppression, prix), comme pour
+ * le matériel. Pour ne rien perdre, on importe une fois pour toutes les anciennes disciplines fixes
+ * (avec leur tarif déjà configuré dans cotisation_prices, s'il existe) et toute valeur de "cours"
+ * déjà utilisée par un client — ainsi aucune fiche existante ne se retrouve avec un cours orphelin. */
+function migrateDisciplinesBackfill(db) {
+  const already = db.prepare("SELECT value FROM settings WHERE key = 'disciplinesMigrated'").get()
+  if (already) return
+
+  const legacyCourseTypes = [
+    "Kung-fu Adulte",
+    "Kung-fu Ado",
+    "Kung-fu Enfant",
+    "Fitness de combat",
+    "Tai-chi",
+    "Self-défense",
+  ]
+  const usedStatuses = db
+    .prepare("SELECT DISTINCT status FROM clients WHERE status IS NOT NULL AND status <> 'Non catégorisé'")
+    .all()
+    .map((r) => r.status)
+  const prices = Object.fromEntries(
+    db.prepare("SELECT course_type, price FROM cotisation_prices").all().map((r) => [r.course_type, r.price]),
+  )
+
+  const labels = new Set([...legacyCourseTypes, ...usedStatuses])
+  const insert = db.prepare(
+    `INSERT INTO disciplines (id, label, price) VALUES (@id, @label, @price)
+     ON CONFLICT(label) DO NOTHING`,
+  )
+  for (const label of labels) {
+    insert.run({ id: crypto.randomUUID(), label, price: prices[label] ?? 0 })
+  }
+
+  db.prepare("INSERT INTO settings (key, value) VALUES ('disciplinesMigrated', '1')").run()
 }
 
 /** Avant cette fonctionnalité, "client_seasons" ne servait qu'à surclasser cours/payé : une
@@ -889,6 +934,37 @@ function deleteEquipmentItem(id) {
   getDb().prepare("DELETE FROM equipment_items WHERE id = ?").run(id)
 }
 
+/* ---------- Disciplines (cours proposés par le club), librement gérées par le trésorier ---------- */
+function getDisciplines() {
+  return getDb().prepare("SELECT * FROM disciplines ORDER BY label").all()
+}
+
+function createDiscipline(discipline) {
+  getDb()
+    .prepare("INSERT INTO disciplines (id, label, price) VALUES (@id, @label, @price)")
+    .run(discipline)
+}
+
+function updateDiscipline(id, patch) {
+  const fields = []
+  const params = { id }
+  for (const [key, column] of [
+    ["label", "label"],
+    ["price", "price"],
+  ]) {
+    if (patch[key] !== undefined) {
+      fields.push(`${column} = @${key}`)
+      params[key] = patch[key]
+    }
+  }
+  if (fields.length === 0) return
+  getDb().prepare(`UPDATE disciplines SET ${fields.join(", ")} WHERE id = @id`).run(params)
+}
+
+function deleteDiscipline(id) {
+  getDb().prepare("DELETE FROM disciplines WHERE id = ?").run(id)
+}
+
 function getDbFilePath() {
   return path.join(app.getPath("userData"), "compta.sqlite3")
 }
@@ -940,6 +1016,10 @@ module.exports = {
   createEquipmentItem,
   updateEquipmentItem,
   deleteEquipmentItem,
+  getDisciplines,
+  createDiscipline,
+  updateDiscipline,
+  deleteDiscipline,
   getTransactions,
   getTransactionById,
   createTransaction,

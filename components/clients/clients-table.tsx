@@ -39,36 +39,41 @@ import { Empty } from "@/components/ui/empty"
 import { MethodBadge } from "@/components/finance-badges"
 import { AddClientDialog } from "@/components/clients/add-client-dialog"
 import { clientFullName, findClientPayments } from "@/lib/client-payments"
-import { formatDate, formatEuro, ALL_COURSE_TYPES, type CourseType } from "@/lib/mock-data"
+import { useDisciplinesStore } from "@/lib/disciplines-store"
+import { formatDate, formatEuro, type CourseType } from "@/lib/mock-data"
 import { useSeasonClients, useSeasonTransactions } from "@/lib/seasons-store"
 import { useTranslation } from "@/lib/i18n/context"
 
-const statusStyles: Record<CourseType, string> = {
-  "Kung-fu Adulte":
-    "border-transparent bg-[oklch(0.55_0.13_265)]/12 text-[oklch(0.5_0.15_265)] dark:text-[oklch(0.75_0.12_265)]",
-  "Kung-fu Ado":
-    "border-transparent bg-[oklch(0.6_0.1_200)]/14 text-[oklch(0.48_0.11_200)] dark:text-[oklch(0.72_0.1_200)]",
-  "Kung-fu Enfant":
-    "border-transparent bg-success/12 text-success dark:text-[oklch(0.72_0.14_155)]",
-  "Fitness de combat":
-    "border-transparent bg-warning/15 text-[oklch(0.5_0.12_60)] dark:text-[oklch(0.8_0.13_65)]",
-  "Tai-chi": "border-transparent bg-muted text-muted-foreground",
-  "Self-défense":
-    "border-transparent bg-destructive/10 text-destructive dark:bg-destructive/20",
-  "Non catégorisé": "border-dashed bg-transparent text-muted-foreground",
-}
+// Un dégradé fixe de couleurs appliqué dans l'ordre aux disciplines (qui sont désormais une liste
+// libre, pas une énumération fixe) ; "Non catégorisé" garde son style neutre dédié.
+const STATUS_COLOR_CYCLE = [
+  "border-transparent bg-[oklch(0.55_0.13_265)]/12 text-[oklch(0.5_0.15_265)] dark:text-[oklch(0.75_0.12_265)]",
+  "border-transparent bg-[oklch(0.6_0.1_200)]/14 text-[oklch(0.48_0.11_200)] dark:text-[oklch(0.72_0.1_200)]",
+  "border-transparent bg-success/12 text-success dark:text-[oklch(0.72_0.14_155)]",
+  "border-transparent bg-warning/15 text-[oklch(0.5_0.12_60)] dark:text-[oklch(0.8_0.13_65)]",
+  "border-transparent bg-muted text-muted-foreground",
+  "border-transparent bg-destructive/10 text-destructive dark:bg-destructive/20",
+]
+const UNCATEGORIZED_STYLE = "border-dashed bg-transparent text-muted-foreground"
 
 export function ClientsTable() {
   const { t } = useTranslation()
   const { clients, setClientSeasonInfo } = useSeasonClients()
   const seasonTransactions = useSeasonTransactions()
+  const { disciplines } = useDisciplinesStore()
   const [query, setQuery] = useState("")
   const [status, setStatus] = useState("all")
   const [paymentStatus, setPaymentStatus] = useState("all")
 
+  function statusStyle(course: CourseType) {
+    if (course === "Non catégorisé") return UNCATEGORIZED_STYLE
+    const index = disciplines.findIndex((d) => d.label === course)
+    return STATUS_COLOR_CYCLE[(index < 0 ? 0 : index) % STATUS_COLOR_CYCLE.length]
+  }
+
   const statusItems = [
     { value: "all", label: t.clients.allStatuses },
-    ...ALL_COURSE_TYPES.map((c) => ({ value: c, label: t.courseTypes[c] })),
+    ...disciplines.map((d) => ({ value: d.label, label: d.label })),
   ]
 
   const paymentStatusItems = [
@@ -194,9 +199,9 @@ export function ClientsTable() {
                   <TableCell>
                     <Badge
                       variant="outline"
-                      className={`font-medium ${statusStyles[c.status]}`}
+                      className={`font-medium ${statusStyle(c.status)}`}
                     >
-                      {t.courseTypes[c.status]}
+                      {t.courseTypes[c.status] ?? c.status}
                     </Badge>
                   </TableCell>
                   <TableCell>

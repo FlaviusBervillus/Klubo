@@ -67,15 +67,14 @@ export interface Transaction {
 export type Role = "tresorier" | "secretaire" | "president" | "admin"
 
 /* ---------- Clients ---------- */
-export type CourseType =
-  | "Kung-fu Adulte"
-  | "Kung-fu Ado"
-  | "Kung-fu Enfant"
-  | "Fitness de combat"
-  | "Tai-chi"
-  | "Self-défense"
-  | "Non catégorisé"
+// Les disciplines sont désormais une liste librement gérée par le trésorier (voir
+// lib/disciplines-store.tsx et la page /disciplines) plutôt qu'une liste figée : ce type reste un
+// simple alias de "string" pour la lisibilité du code, et n'énumère plus les valeurs possibles.
+export type CourseType = string
 
+export const UNCATEGORIZED_COURSE: CourseType = "Non catégorisé"
+
+/** Repli historique utilisé quand la liste de disciplines n'est pas encore chargée/configurée. */
 export const ALL_COURSE_TYPES: CourseType[] = [
   "Kung-fu Adulte",
   "Kung-fu Ado",

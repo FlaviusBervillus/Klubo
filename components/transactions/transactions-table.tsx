@@ -51,7 +51,7 @@ import { MethodBadge, StatusBadge, Amount } from "@/components/finance-badges"
 import { ReceiptPreviewDialog } from "@/components/transactions/receipt-preview-dialog"
 import { useTranslation } from "@/lib/i18n/context"
 import { applyCotisationAutoMatch } from "@/lib/cotisation-matching"
-import { useCotisationPrices } from "@/lib/cotisation-prices-store"
+import { useDisciplinesStore } from "@/lib/disciplines-store"
 import { applyEquipmentAutoMatch } from "@/lib/equipment-matching"
 import { useEquipmentStore } from "@/lib/equipment-store"
 import { useClientsStore } from "@/lib/clients-store"
@@ -68,7 +68,8 @@ export function TransactionsTable() {
   const { categorize: categorizeInStore } = useTransactionsStore()
   const { clients, updateClient } = useClientsStore()
   const { setClientSeasonInfo, hasActiveSeason } = useSeasonClients()
-  const { prices } = useCotisationPrices()
+  const { disciplines } = useDisciplinesStore()
+  const prices = Object.fromEntries(disciplines.map((d) => [d.label, d.price]))
   const { items: equipmentItems, updateItem: updateEquipmentItem } = useEquipmentStore()
   const [query, setQuery] = useState("")
   const [category, setCategory] = useState("all")
@@ -150,7 +151,7 @@ export function TransactionsTable() {
       result.courseUpdated
         ? t.transactions.cotisationMatchedCourse
             .replace("{name}", result.clientName)
-            .replace("{course}", t.courseTypes[result.courseUpdated])
+            .replace("{course}", t.courseTypes[result.courseUpdated] ?? result.courseUpdated)
         : t.transactions.cotisationMatchedPaid.replace("{name}", result.clientName),
     )
   }

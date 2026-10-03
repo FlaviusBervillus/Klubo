@@ -1,6 +1,8 @@
 import { clientFullName, normalizeClientName } from "@/lib/client-payments"
-import type { CotisationPrices } from "@/lib/cotisation-prices-store"
 import type { Client, CourseType, Transaction } from "@/lib/mock-data"
+
+/** Tarif par discipline (label -> prix), tel que géré sur la page /disciplines. */
+export type CotisationPrices = Record<string, number>
 
 export interface CotisationMatch {
   client: Client

@@ -27,11 +27,12 @@ import {
 } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
 import { useClientsStore } from "@/lib/clients-store"
+import { useDisciplinesStore } from "@/lib/disciplines-store"
 import { useSeasonClients } from "@/lib/seasons-store"
 import { useTranslation } from "@/lib/i18n/context"
 import {
-  ALL_COURSE_TYPES,
   ALL_PAYMENT_METHODS,
+  UNCATEGORIZED_COURSE,
   type Client,
   type CourseType,
   type PaymentMethod,
@@ -42,7 +43,7 @@ const emptyForm = {
   lastName: "",
   email: "",
   address: "",
-  status: "Kung-fu Adulte" as CourseType,
+  status: UNCATEGORIZED_COURSE as CourseType,
   method: "especes" as PaymentMethod,
   paid: true,
   phone: "",
@@ -73,6 +74,7 @@ export function AddClientDialog({ client }: { client?: Client } = {}) {
   const { t } = useTranslation()
   const { clients, addClient, updateClient, available } = useClientsStore()
   const { setClientSeasonInfo, hasActiveSeason } = useSeasonClients()
+  const { disciplines } = useDisciplinesStore()
   const [open, setOpen] = useState(false)
   const [form, setForm] = useState(client ? formFromClient(client) : emptyForm)
   const isEdit = !!client
@@ -247,9 +249,12 @@ export function AddClientDialog({ client }: { client?: Client } = {}) {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectGroup>
-                      {ALL_COURSE_TYPES.map((c) => (
-                        <SelectItem key={c} value={c}>
-                          {t.courseTypes[c]}
+                      <SelectItem value={UNCATEGORIZED_COURSE}>
+                        {t.courseTypes[UNCATEGORIZED_COURSE] ?? UNCATEGORIZED_COURSE}
+                      </SelectItem>
+                      {disciplines.map((d) => (
+                        <SelectItem key={d.id} value={d.label}>
+                          {t.courseTypes[d.label] ?? d.label}
                         </SelectItem>
                       ))}
                     </SelectGroup>

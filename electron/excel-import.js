@@ -51,12 +51,16 @@ const HEADER_MAP = {
   ville: "city",
 }
 
-function matchCourseType(raw) {
+/** Rapproche la catégorie lue dans le fichier avec une discipline connue (celles configurées sur
+ * la page /disciplines, en plus des 6 historiques) — toujours relu et confirmé par l'utilisateur
+ * dans l'écran de vérification avant application, donc une approximation reste sans risque ici. */
+function matchCourseType(raw, disciplineLabels) {
   if (!raw) return null
   const norm = normalizeHeader(raw)
-  const exact = COURSE_TYPES.find((c) => normalizeHeader(c) === norm)
+  const candidates = [...new Set([...COURSE_TYPES, ...disciplineLabels])]
+  const exact = candidates.find((c) => normalizeHeader(c) === norm)
   if (exact) return exact
-  return COURSE_TYPES.find((c) => normalizeHeader(c).includes(norm) || norm.includes(normalizeHeader(c))) || null
+  return candidates.find((c) => normalizeHeader(c).includes(norm) || norm.includes(normalizeHeader(c))) || null
 }
 
 function parseBirthDate(value) {
@@ -149,9 +153,10 @@ function computeFillPatch(row, existing, courseType) {
  * parent et son enfant — pour proposer un lien tuteur/enfant, sans jamais le forcer. */
 async function analyzeImport(filePath) {
   const rows = await parseExcelFile(filePath)
+  const disciplineLabels = db.getDisciplines().map((d) => d.label)
 
   const items = rows.map((row, rowIndex) => {
-    const courseType = matchCourseType(row.category)
+    const courseType = matchCourseType(row.category, disciplineLabels)
     const normName = normalizeName(row.firstName, row.lastName)
 
     let kind = "create"

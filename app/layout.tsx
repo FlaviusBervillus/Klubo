@@ -8,8 +8,8 @@ import { Toaster } from "@/components/ui/sonner"
 import { AuthProvider } from "@/lib/auth-context"
 import { ClientsProvider } from "@/lib/clients-store"
 import { ClubSettingsProvider } from "@/lib/club-settings"
-import { CotisationPricesProvider } from "@/lib/cotisation-prices-store"
 import { DebtsProvider } from "@/lib/debts-store"
+import { DisciplinesProvider } from "@/lib/disciplines-store"
 import { EquipmentProvider } from "@/lib/equipment-store"
 import { FixedAssetsProvider } from "@/lib/fixed-assets-store"
 import { LocaleProvider } from "@/lib/i18n/context"
@@ -67,7 +67,7 @@ export default function RootLayout({
                     <ClientsProvider>
                       <FixedAssetsProvider>
                         <DebtsProvider>
-                          <CotisationPricesProvider>
+                          <DisciplinesProvider>
                             <EquipmentProvider>
                               <AuthProvider>
                                 <AuthGate>
@@ -77,7 +77,7 @@ export default function RootLayout({
                                 <Toaster position="top-right" />
                               </AuthProvider>
                             </EquipmentProvider>
-                          </CotisationPricesProvider>
+                          </DisciplinesProvider>
                         </DebtsProvider>
                       </FixedAssetsProvider>
                     </ClientsProvider>

@@ -25,6 +25,7 @@ export interface Dictionary {
     dashboard: string
     transactions: string
     clients: string
+    disciplines: string
     materiel: string
     reports: string
     settings: string
@@ -304,9 +305,6 @@ export interface Dictionary {
     accessDeniedHint: string
     clubIdentityTitle: string
     clubIdentitySubtitle: string
-    cotisationPricesTitle: string
-    cotisationPricesSubtitle: string
-    cotisationPricesSaved: string
     fieldClubName: string
     fieldSeason: string
     fieldStripeAccountName: string
@@ -562,6 +560,24 @@ export interface Dictionary {
     end: string
     created: string
     allTime: string
+  }
+  disciplines: {
+    title: string
+    subtitle: string
+    addDiscipline: string
+    addDisciplineTitle: string
+    editDisciplineTitle: string
+    addDisciplineDescription: string
+    labelPlaceholder: string
+    colLabel: string
+    colPrice: string
+    colEnrolled: string
+    totalDisciplines: string
+    averagePrice: string
+    disciplineSaved: string
+    disciplineDeleted: string
+    noDisciplines: string
+    duplicateLabel: string
   }
   materiel: {
     title: string

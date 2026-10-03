@@ -157,6 +157,18 @@ ipcMain.handle("db:createEquipmentItem", (_e, item) => {
 ipcMain.handle("db:updateEquipmentItem", (_e, id, patch) => db.updateEquipmentItem(id, patch))
 ipcMain.handle("db:deleteEquipmentItem", (_e, id) => db.deleteEquipmentItem(id))
 
+ipcMain.handle("db:getDisciplines", () => db.getDisciplines())
+ipcMain.handle("db:createDiscipline", (_e, discipline) => {
+  try {
+    db.createDiscipline({ ...discipline, id: discipline.id || crypto.randomUUID() })
+    return { ok: true }
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) }
+  }
+})
+ipcMain.handle("db:updateDiscipline", (_e, id, patch) => db.updateDiscipline(id, patch))
+ipcMain.handle("db:deleteDiscipline", (_e, id) => db.deleteDiscipline(id))
+
 ipcMain.handle("db:getTransactions", () => db.getTransactions())
 ipcMain.handle("db:createTransaction", (_e, tx) => {
   db.createTransaction({ ...tx, id: tx.id || crypto.randomUUID() })

@@ -107,6 +107,12 @@ export interface DbEquipmentItem {
   notes: string
 }
 
+export interface DbDiscipline {
+  id: string
+  label: string
+  price: number
+}
+
 export interface DbTransaction {
   id: string
   date: string
@@ -196,6 +202,13 @@ declare global {
         createEquipmentItem: (item: Record<string, unknown>) => Promise<void>
         updateEquipmentItem: (id: string, patch: Record<string, unknown>) => Promise<void>
         deleteEquipmentItem: (id: string) => Promise<void>
+
+        getDisciplines: () => Promise<DbDiscipline[]>
+        createDiscipline: (
+          discipline: Record<string, unknown>,
+        ) => Promise<{ ok: true } | { ok: false; error?: string }>
+        updateDiscipline: (id: string, patch: Record<string, unknown>) => Promise<void>
+        deleteDiscipline: (id: string) => Promise<void>
 
         getTransactions: () => Promise<DbTransaction[]>
         createTransaction: (tx: Record<string, unknown>) => Promise<void>

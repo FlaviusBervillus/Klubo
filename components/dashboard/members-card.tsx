@@ -11,28 +11,37 @@ import {
 } from "@/components/ui/card"
 import { useSeasonClients } from "@/lib/seasons-store"
 import { useTranslation } from "@/lib/i18n/context"
-import { ALL_COURSE_TYPES, type CourseType } from "@/lib/mock-data"
 
-const dotColors: Record<CourseType, string> = {
-  "Kung-fu Adulte": "bg-[oklch(0.55_0.13_265)]",
-  "Kung-fu Ado": "bg-[oklch(0.6_0.1_200)]",
-  "Kung-fu Enfant": "bg-success",
-  "Fitness de combat": "bg-warning",
-  "Tai-chi": "bg-muted-foreground",
-  "Self-défense": "bg-destructive",
-  "Non catégorisé": "bg-border",
-}
+// Les disciplines sont une liste libre (voir /disciplines) : on groupe directement par le statut
+// réellement présent sur les fiches clients, plutôt que par une liste figée de cours.
+const DOT_COLOR_CYCLE = [
+  "bg-[oklch(0.55_0.13_265)]",
+  "bg-[oklch(0.6_0.1_200)]",
+  "bg-success",
+  "bg-warning",
+  "bg-muted-foreground",
+  "bg-destructive",
+]
+const UNCATEGORIZED_DOT = "bg-border"
 
 export function MembersCard() {
   const { t } = useTranslation()
   const { clients } = useSeasonClients()
 
-  const counts = ALL_COURSE_TYPES
-    .map((status) => ({
+  const distinctStatuses = Array.from(new Set(clients.map((c) => c.status))).filter(
+    (s) => s !== "Non catégorisé",
+  )
+  const counts = distinctStatuses
+    .map((status, index) => ({
       status,
       count: clients.filter((c) => c.status === status).length,
+      dot: DOT_COLOR_CYCLE[index % DOT_COLOR_CYCLE.length],
     }))
     .filter((c) => c.count > 0)
+  const uncategorizedCount = clients.filter((c) => c.status === "Non catégorisé").length
+  if (uncategorizedCount > 0) {
+    counts.push({ status: "Non catégorisé", count: uncategorizedCount, dot: UNCATEGORIZED_DOT })
+  }
 
   return (
     <Card>
@@ -53,10 +62,10 @@ export function MembersCard() {
           {counts.map((c) => (
             <li key={c.status} className="flex items-center gap-2 text-sm">
               <span
-                className={`size-2.5 shrink-0 rounded-full ${dotColors[c.status]}`}
+                className={`size-2.5 shrink-0 rounded-full ${c.dot}`}
               />
               <span className="flex-1 truncate text-muted-foreground">
-                {t.courseTypes[c.status]}
+                {t.courseTypes[c.status] ?? c.status}
               </span>
               <span className="font-mono font-medium tabular-nums">
                 {c.count}
