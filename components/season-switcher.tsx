@@ -111,7 +111,7 @@ export function SeasonFormDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-sm">
+      <DialogContent className="sm:max-w-md">
         <form onSubmit={handleSubmit}>
           <DialogHeader>
             <DialogTitle>{isEdit ? t.seasons.editTitle : t.seasons.newTitle}</DialogTitle>
@@ -232,10 +232,10 @@ export function SeasonFormDialog({
                   type="button"
                   variant="ghost"
                   size="sm"
-                  className="justify-start text-destructive"
+                  className="h-auto w-full justify-start text-left text-destructive whitespace-normal"
                   onClick={() => setCascadeMode(true)}
                 >
-                  <Trash2Icon data-icon="inline-start" />
+                  <Trash2Icon data-icon="inline-start" className="shrink-0" />
                   {t.seasons.cascadeDeleteButton}
                 </Button>
               )}

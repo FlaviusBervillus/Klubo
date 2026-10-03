@@ -511,16 +511,41 @@ function ensurePayerForClient(clientId) {
   return payerId
 }
 
+/** Rattache un client Stripe à un payeur : par id Stripe déjà connu en priorité, sinon par email
+ * — un payeur peut avoir été créé manuellement ou via un import (CSV, représentant légal...) avant
+ * d'avoir jamais payé par Stripe ; sans ce repli par email, la synchro créerait un DOUBLON de ce
+ * payeur (avec l'id Stripe cette fois), détaché des adhérents déjà liés au premier, et plus aucune
+ * mise à jour automatique de cours ne fonctionnerait pour eux. */
 function upsertPayerByStripeId(payer) {
-  const existing = getDb().prepare("SELECT id FROM payers WHERE stripe_customer_id = ?").get(payer.stripeCustomerId)
-  if (existing) {
+  const byStripeId = getDb().prepare("SELECT id FROM payers WHERE stripe_customer_id = ?").get(payer.stripeCustomerId)
+  if (byStripeId) {
     getDb()
       .prepare(
         `UPDATE payers SET first_name=@firstName, last_name=@lastName, email=@email WHERE stripe_customer_id=@stripeCustomerId`,
       )
       .run(payer)
-    return existing.id
+    return byStripeId.id
   }
+
+  if (payer.email) {
+    const byEmail = getDb()
+      .prepare("SELECT id, stripe_customer_id FROM payers WHERE email <> '' AND lower(email) = lower(?)")
+      .get(payer.email)
+    if (byEmail && !byEmail.stripe_customer_id) {
+      getDb()
+        .prepare(
+          `UPDATE payers SET stripe_customer_id=@stripeCustomerId, first_name=@firstName, last_name=@lastName WHERE id=@id`,
+        )
+        .run({
+          stripeCustomerId: payer.stripeCustomerId,
+          firstName: payer.firstName,
+          lastName: payer.lastName,
+          id: byEmail.id,
+        })
+      return byEmail.id
+    }
+  }
+
   return createPayer(payer)
 }
 
@@ -894,13 +919,13 @@ function findSeasonByLabel(label) {
 
 /** Retrouve une saison par son libellé (ex. import d'un fichier qui porte une colonne "Saison"),
  * ou la crée si elle n'existe pas encore — en déduisant ses dates du format "AAAA-AAAA" habituel
- * des clubs sportifs (1er septembre -> 31 août), seul format que ce libellé prend dans la pratique. */
+ * des clubs sportifs (1er août -> 31 juillet, les dates par défaut de ce club). */
 function findOrCreateSeasonByLabel(label) {
   const existing = findSeasonByLabel(label)
   if (existing) return existing
   const match = label.trim().match(/^(\d{4})\s*-\s*(\d{4})$/)
-  const startDate = match ? `${match[1]}-09-01` : `${new Date().getFullYear()}-09-01`
-  const endDate = match ? `${match[2]}-08-31` : `${new Date().getFullYear() + 1}-08-31`
+  const startDate = match ? `${match[1]}-08-01` : `${new Date().getFullYear()}-08-01`
+  const endDate = match ? `${match[2]}-07-31` : `${new Date().getFullYear() + 1}-07-31`
   const id = crypto.randomUUID()
   createSeason({ id, label: label.trim(), startDate, endDate })
   return { id, label: label.trim(), start_date: startDate, end_date: endDate }

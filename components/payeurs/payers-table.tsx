@@ -33,26 +33,38 @@ import {
 import { AddPayerDialog } from "@/components/payeurs/add-payer-dialog"
 import { useClientsStore } from "@/lib/clients-store"
 import { usePayersStore } from "@/lib/payers-store"
+import { useSeasonClients, useSeasons } from "@/lib/seasons-store"
 import { useTranslation } from "@/lib/i18n/context"
+
+/** Regroupe par payeur les noms des adhérents d'une liste de clients donnée (saison active ou
+ * toutes saisons confondues selon la liste passée). */
+function groupLinkedNames(clients: { payerId: string | null; firstName: string; lastName: string }[]) {
+  const map = new Map<string, string[]>()
+  for (const c of clients) {
+    if (!c.payerId) continue
+    const names = map.get(c.payerId) ?? []
+    names.push(`${c.firstName} ${c.lastName}`.trim())
+    map.set(c.payerId, names)
+  }
+  return map
+}
 
 export function PayersTable() {
   const { t } = useTranslation()
   const { payers, deletePayer, deletePayerCascade } = usePayersStore()
-  const { clients, refresh: refreshClients } = useClientsStore()
+  const { clients: allClients, refresh: refreshClients } = useClientsStore()
+  const { clients: seasonClients } = useSeasonClients()
+  const { activeSeason } = useSeasons()
   const [query, setQuery] = useState("")
   const [cascadeTarget, setCascadeTarget] = useState<{ id: string; names: string[] } | null>(null)
   const [cascadeBusy, setCascadeBusy] = useState(false)
 
-  const linkedClientsByPayer = useMemo(() => {
-    const map = new Map<string, string[]>()
-    for (const c of clients) {
-      if (!c.payerId) continue
-      const names = map.get(c.payerId) ?? []
-      names.push(`${c.firstName} ${c.lastName}`.trim())
-      map.set(c.payerId, names)
-    }
-    return map
-  }, [clients])
+  // L'affichage (badges, compteurs) suit la saison active — un adhérent inscrit une autre année
+  // ne doit pas faire paraître son payeur "lié" quand on regarde une saison où il n'est pas. La
+  // suppression, elle, doit rester fiable quelle que soit la saison consultée : elle se base
+  // toujours sur TOUS les adhérents liés, saison active ou non.
+  const linkedClientsThisSeason = useMemo(() => groupLinkedNames(seasonClients), [seasonClients])
+  const linkedClientsAllTime = useMemo(() => groupLinkedNames(allClients), [allClients])
 
   const filtered = useMemo(() => {
     if (!query) return payers
@@ -60,11 +72,11 @@ export function PayersTable() {
     return payers.filter((p) => `${p.firstName} ${p.lastName} ${p.email}`.toLowerCase().includes(q))
   }, [payers, query])
 
-  const linkedCount = payers.filter((p) => (linkedClientsByPayer.get(p.id)?.length ?? 0) > 0).length
+  const linkedCount = payers.filter((p) => (linkedClientsThisSeason.get(p.id)?.length ?? 0) > 0).length
   const unlinkedCount = payers.length - linkedCount
 
   async function handleDelete(id: string) {
-    const linked = linkedClientsByPayer.get(id)
+    const linked = linkedClientsAllTime.get(id)
     if (linked && linked.length > 0) {
       setCascadeTarget({ id, names: linked })
       return
@@ -98,13 +110,21 @@ export function PayersTable() {
         </Card>
         <Card>
           <CardHeader>
-            <CardDescription>{t.payers.linkedPayers}</CardDescription>
+            <CardDescription>
+              {activeSeason
+                ? t.payers.linkedPayersSeason.replace("{season}", activeSeason.label)
+                : t.payers.linkedPayers}
+            </CardDescription>
             <CardTitle className="font-mono text-2xl tabular-nums">{linkedCount}</CardTitle>
           </CardHeader>
         </Card>
         <Card>
           <CardHeader>
-            <CardDescription>{t.payers.unlinkedPayers}</CardDescription>
+            <CardDescription>
+              {activeSeason
+                ? t.payers.unlinkedPayersSeason.replace("{season}", activeSeason.label)
+                : t.payers.unlinkedPayers}
+            </CardDescription>
             <CardTitle className="font-mono text-2xl tabular-nums text-muted-foreground">
               {unlinkedCount}
             </CardTitle>
@@ -137,7 +157,9 @@ export function PayersTable() {
           </TableHeader>
           <TableBody>
             {filtered.map((payer) => {
-              const linked = linkedClientsByPayer.get(payer.id) ?? []
+              const linkedThisSeason = linkedClientsThisSeason.get(payer.id) ?? []
+              const linkedAllTime = linkedClientsAllTime.get(payer.id) ?? []
+              const otherSeasonsCount = linkedAllTime.length - linkedThisSeason.length
               return (
                 <TableRow key={payer.id}>
                   <TableCell className="font-medium">{payer.firstName}</TableCell>
@@ -145,14 +167,23 @@ export function PayersTable() {
                   <TableCell className="text-muted-foreground">{payer.email || "—"}</TableCell>
                   <TableCell className="text-muted-foreground">{payer.phone || "—"}</TableCell>
                   <TableCell>
-                    {linked.length > 0 ? (
-                      <div className="flex flex-wrap gap-1">
-                        {linked.map((name) => (
+                    {linkedThisSeason.length > 0 ? (
+                      <div className="flex flex-wrap items-center gap-1">
+                        {linkedThisSeason.map((name) => (
                           <Badge key={name} variant="outline" className="font-normal">
                             {name}
                           </Badge>
                         ))}
+                        {otherSeasonsCount > 0 ? (
+                          <span className="text-xs text-muted-foreground">
+                            {t.payers.otherSeasonsCount.replace("{count}", String(otherSeasonsCount))}
+                          </span>
+                        ) : null}
                       </div>
+                    ) : otherSeasonsCount > 0 ? (
+                      <span className="text-xs text-muted-foreground">
+                        {t.payers.otherSeasonsOnly.replace("{count}", String(otherSeasonsCount))}
+                      </span>
                     ) : (
                       <span className="text-xs text-muted-foreground">{t.payers.noLinkedAdherent}</span>
                     )}

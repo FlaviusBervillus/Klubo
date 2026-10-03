@@ -601,7 +601,11 @@ export interface Dictionary {
     colLinkedAdherents: string
     totalPayers: string
     linkedPayers: string
+    linkedPayersSeason: string
     unlinkedPayers: string
+    unlinkedPayersSeason: string
+    otherSeasonsCount: string
+    otherSeasonsOnly: string
     noLinkedAdherent: string
     payerSaved: string
     payerDeleted: string

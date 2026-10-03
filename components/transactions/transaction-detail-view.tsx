@@ -112,6 +112,7 @@ export function TransactionDetailView() {
   const txId = tx.id
   const txMember = tx.member
   const txAmount = tx.amount
+  const txDescription = tx.description
 
   function openReceiptPreview() {
     setPreviewOpen(true)
@@ -139,7 +140,7 @@ export function TransactionDetailView() {
       })
     }
     if (targetCategory === "Équipements") {
-      applyEquipmentAutoMatch(txAmount, equipmentItems, updateEquipmentItem).then((result) => {
+      applyEquipmentAutoMatch(txAmount, equipmentItems, updateEquipmentItem, txDescription).then((result) => {
         if (!result) return
         toast.success(
           t.transactions.equipmentMatched

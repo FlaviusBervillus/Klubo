@@ -175,7 +175,7 @@ export function TransactionsTable() {
   async function runEquipmentAutoMatch(id: string) {
     const tx = rows.find((r) => r.id === id)
     if (!tx) return
-    const result = await applyEquipmentAutoMatch(tx.amount, equipmentItems, updateEquipmentItem)
+    const result = await applyEquipmentAutoMatch(tx.amount, equipmentItems, updateEquipmentItem, tx.description)
     if (!result) return
     toast.success(
       t.transactions.equipmentMatched
