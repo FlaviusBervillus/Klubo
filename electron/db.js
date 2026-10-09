@@ -182,6 +182,30 @@ function migrate(db) {
       city TEXT NOT NULL DEFAULT '',
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
+
+    -- Devis : document librement rempli (pas rattaché à un adhérent/une transaction, contrairement
+    -- aux factures) — chaque champ est du texte libre que le trésorier remplit comme il l'entend,
+    -- voir electron/quote-pdf.js pour le rendu.
+    CREATE TABLE IF NOT EXISTS quotes (
+      id TEXT PRIMARY KEY,
+      number TEXT NOT NULL DEFAULT '',
+      date TEXT NOT NULL,
+      title TEXT NOT NULL DEFAULT 'DEVIS',
+      subtitle TEXT NOT NULL DEFAULT '',
+      season_label TEXT NOT NULL DEFAULT '',
+      emitter_lines TEXT NOT NULL DEFAULT '',
+      recipient_lines TEXT NOT NULL DEFAULT '',
+      info_title TEXT NOT NULL DEFAULT '',
+      info_text TEXT NOT NULL DEFAULT '',
+      prestation_title TEXT NOT NULL DEFAULT '',
+      prestation_text TEXT NOT NULL DEFAULT '',
+      items_json TEXT NOT NULL DEFAULT '[]',
+      terms_title TEXT NOT NULL DEFAULT '',
+      terms_text TEXT NOT NULL DEFAULT '',
+      signature_left_label TEXT NOT NULL DEFAULT '',
+      signature_right_label TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
   `)
 
   ensureColumn(db, "clients", "address", "address TEXT NOT NULL DEFAULT ''")
@@ -1262,6 +1286,67 @@ function deleteDiscipline(id) {
   getDb().prepare("DELETE FROM disciplines WHERE id = ?").run(id)
 }
 
+/* ---------- Devis (document libre, non rattaché à un adhérent/une transaction) ---------- */
+function getQuotes() {
+  return getDb().prepare("SELECT * FROM quotes ORDER BY date DESC, created_at DESC").all()
+}
+
+function getQuoteById(id) {
+  return getDb().prepare("SELECT * FROM quotes WHERE id = ?").get(id) ?? null
+}
+
+const QUOTE_FIELD_TO_COLUMN = {
+  number: "number",
+  date: "date",
+  title: "title",
+  subtitle: "subtitle",
+  seasonLabel: "season_label",
+  emitterLines: "emitter_lines",
+  recipientLines: "recipient_lines",
+  infoTitle: "info_title",
+  infoText: "info_text",
+  prestationTitle: "prestation_title",
+  prestationText: "prestation_text",
+  itemsJson: "items_json",
+  termsTitle: "terms_title",
+  termsText: "terms_text",
+  signatureLeftLabel: "signature_left_label",
+  signatureRightLabel: "signature_right_label",
+}
+
+function createQuote(quote) {
+  const id = quote.id || crypto.randomUUID()
+  const columns = ["id"]
+  const placeholders = ["@id"]
+  const params = { id }
+  for (const [key, column] of Object.entries(QUOTE_FIELD_TO_COLUMN)) {
+    columns.push(column)
+    placeholders.push(`@${key}`)
+    params[key] = quote[key] ?? ""
+  }
+  getDb()
+    .prepare(`INSERT INTO quotes (${columns.join(", ")}) VALUES (${placeholders.join(", ")})`)
+    .run(params)
+  return id
+}
+
+function updateQuote(id, patch) {
+  const fields = []
+  const params = { id }
+  for (const [key, column] of Object.entries(QUOTE_FIELD_TO_COLUMN)) {
+    if (patch[key] !== undefined) {
+      fields.push(`${column} = @${key}`)
+      params[key] = patch[key]
+    }
+  }
+  if (fields.length === 0) return
+  getDb().prepare(`UPDATE quotes SET ${fields.join(", ")} WHERE id = @id`).run(params)
+}
+
+function deleteQuote(id) {
+  getDb().prepare("DELETE FROM quotes WHERE id = ?").run(id)
+}
+
 function getDbFilePath() {
   return path.join(app.getPath("userData"), "compta.sqlite3")
 }
@@ -1327,6 +1412,11 @@ module.exports = {
   findOrCreateDisciplineByLabel,
   updateDiscipline,
   deleteDiscipline,
+  getQuotes,
+  getQuoteById,
+  createQuote,
+  updateQuote,
+  deleteQuote,
   getTransactions,
   getTransactionById,
   createTransaction,

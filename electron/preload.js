@@ -56,6 +56,11 @@ contextBridge.exposeInMainWorld("electronAPI", {
     updateDiscipline: (id, patch) => ipcRenderer.invoke("db:updateDiscipline", id, patch),
     deleteDiscipline: (id) => ipcRenderer.invoke("db:deleteDiscipline", id),
 
+    getQuotes: () => ipcRenderer.invoke("db:getQuotes"),
+    createQuote: (quote) => ipcRenderer.invoke("db:createQuote", quote),
+    updateQuote: (id, patch) => ipcRenderer.invoke("db:updateQuote", id, patch),
+    deleteQuote: (id) => ipcRenderer.invoke("db:deleteQuote", id),
+
     getTransactions: () => ipcRenderer.invoke("db:getTransactions"),
     createTransaction: (tx) => ipcRenderer.invoke("db:createTransaction", tx),
     updateTransaction: (id, patch) => ipcRenderer.invoke("db:updateTransaction", id, patch),
@@ -90,6 +95,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ipcRenderer.invoke("receipts:download", transactionId, overrides),
   downloadStripeInvoice: (transactionId) =>
     ipcRenderer.invoke("receipts:download-stripe-invoice", transactionId),
+  renderQuotePreview: (quoteId) => ipcRenderer.invoke("quotes:render-preview", quoteId),
+  downloadQuote: (quoteId) => ipcRenderer.invoke("quotes:download", quoteId),
   testStripeConnection: (secretKey) => ipcRenderer.invoke("stripe:test-connection", secretKey),
   syncStripe: (secretKey) => ipcRenderer.invoke("stripe:sync-all", secretKey),
   gocardless: {

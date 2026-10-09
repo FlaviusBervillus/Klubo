@@ -14,6 +14,7 @@ import {
   PackageIcon,
   GraduationCapIcon,
   CreditCardIcon,
+  FileTextIcon,
 } from "lucide-react"
 
 import packageJson from "@/package.json"
@@ -61,6 +62,7 @@ export function AppSidebar() {
     { title: t.nav.payers, href: "/payeurs", icon: CreditCardIcon },
     { title: t.nav.disciplines, href: "/disciplines", icon: GraduationCapIcon },
     { title: t.nav.materiel, href: "/materiel", icon: PackageIcon },
+    { title: t.nav.devis, href: "/devis", icon: FileTextIcon },
     { title: t.nav.reports, href: "/rapports", icon: FileBarChartIcon },
     ...(session?.role === "admin"
       ? [{ title: t.nav.users, href: "/utilisateurs", icon: UserCogIcon }]

@@ -131,6 +131,27 @@ export interface DbDiscipline {
   price: number
 }
 
+export interface DbQuote {
+  id: string
+  number: string
+  date: string
+  title: string
+  subtitle: string
+  season_label: string
+  emitter_lines: string
+  recipient_lines: string
+  info_title: string
+  info_text: string
+  prestation_title: string
+  prestation_text: string
+  items_json: string
+  terms_title: string
+  terms_text: string
+  signature_left_label: string
+  signature_right_label: string
+  created_at: string
+}
+
 export interface DbTransaction {
   id: string
   date: string
@@ -238,6 +259,11 @@ declare global {
         updateDiscipline: (id: string, patch: Record<string, unknown>) => Promise<void>
         deleteDiscipline: (id: string) => Promise<void>
 
+        getQuotes: () => Promise<DbQuote[]>
+        createQuote: (quote: Record<string, unknown>) => Promise<{ ok: true; id: string }>
+        updateQuote: (id: string, patch: Record<string, unknown>) => Promise<void>
+        deleteQuote: (id: string) => Promise<void>
+
         getTransactions: () => Promise<DbTransaction[]>
         createTransaction: (tx: Record<string, unknown>) => Promise<void>
         updateTransaction: (id: string, patch: Record<string, unknown>) => Promise<void>
@@ -296,6 +322,12 @@ declare global {
       ) => Promise<{ ok: true; path: string } | { ok: false; error?: string; canceled?: boolean }>
       downloadStripeInvoice: (
         transactionId: string,
+      ) => Promise<{ ok: true; path: string } | { ok: false; error?: string; canceled?: boolean }>
+      renderQuotePreview: (
+        quoteId: string,
+      ) => Promise<{ ok: true; html: string } | { ok: false; error?: string }>
+      downloadQuote: (
+        quoteId: string,
       ) => Promise<{ ok: true; path: string } | { ok: false; error?: string; canceled?: boolean }>
       testStripeConnection: (secretKey: string) => Promise<
         | { ok: true; available: { amount: number; currency: string }[] }

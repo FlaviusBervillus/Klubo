@@ -28,6 +28,7 @@ export interface Dictionary {
     payers: string
     disciplines: string
     materiel: string
+    devis: string
     reports: string
     settings: string
     users: string
@@ -623,6 +624,53 @@ export interface Dictionary {
     cascadeDeleteDescription: string
     cascadeDeleteConfirm: string
     importErrorTitle: string
+  }
+  devis: {
+    title: string
+    subtitle: string
+    newQuote: string
+    newQuoteTitle: string
+    editQuoteTitle: string
+    formDescription: string
+    fieldTitle: string
+    fieldSubtitle: string
+    fieldSeasonLabel: string
+    fieldNumber: string
+    fieldNumberPlaceholder: string
+    fieldDate: string
+    fieldEmitter: string
+    fieldRecipient: string
+    fieldRecipientPlaceholder: string
+    fieldInfoTitle: string
+    fieldInfoTitlePlaceholder: string
+    fieldInfoTextPlaceholder: string
+    fieldPrestationTitle: string
+    fieldPrestationTextPlaceholder: string
+    fieldItems: string
+    itemLabelPlaceholder: string
+    itemDescriptionPlaceholder: string
+    itemQty: string
+    itemUnitPrice: string
+    itemAmount: string
+    addItem: string
+    removeItem: string
+    total: string
+    fieldTermsTitle: string
+    fieldTermsTextPlaceholder: string
+    fieldSignatureLeft: string
+    fieldSignatureRight: string
+    quoteSaved: string
+    quoteDeleted: string
+    noQuotes: string
+    colDate: string
+    colNumber: string
+    colRecipient: string
+    colTotal: string
+    previewTitle: string
+    previewDescription: string
+    download: string
+    downloaded: string
+    downloadError: string
   }
   materiel: {
     title: string

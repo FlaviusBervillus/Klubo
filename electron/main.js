@@ -10,6 +10,7 @@ const stripeSync = require("./stripe-sync")
 const gocardlessSync = require("./gocardless-sync")
 const megaSync = require("./mega-sync")
 const { generateReceiptPdf, renderInvoiceHtml } = require("./invoice-pdf")
+const { generateQuotePdf, renderQuoteHtml } = require("./quote-pdf")
 const excelImport = require("./excel-import")
 const { setupAutoUpdater } = require("./updater")
 
@@ -192,6 +193,72 @@ ipcMain.handle("db:createDiscipline", (_e, discipline) => {
 })
 ipcMain.handle("db:updateDiscipline", (_e, id, patch) => db.updateDiscipline(id, patch))
 ipcMain.handle("db:deleteDiscipline", (_e, id) => db.deleteDiscipline(id))
+
+ipcMain.handle("db:getQuotes", () => db.getQuotes())
+ipcMain.handle("db:createQuote", (_e, quote) => {
+  const id = db.createQuote({ ...quote, id: quote.id || crypto.randomUUID() })
+  return { ok: true, id }
+})
+ipcMain.handle("db:updateQuote", (_e, id, patch) => db.updateQuote(id, patch))
+ipcMain.handle("db:deleteQuote", (_e, id) => db.deleteQuote(id))
+
+/** Ligne SQL (snake_case, items_json en texte) -> objet attendu par renderQuoteHtml. */
+function rowToQuoteForRender(row) {
+  let items = []
+  try {
+    items = JSON.parse(row.items_json || "[]")
+  } catch {
+    items = []
+  }
+  return {
+    number: row.number,
+    date: row.date,
+    title: row.title,
+    subtitle: row.subtitle,
+    seasonLabel: row.season_label,
+    emitterLines: row.emitter_lines,
+    recipientLines: row.recipient_lines,
+    infoTitle: row.info_title,
+    infoText: row.info_text,
+    prestationTitle: row.prestation_title,
+    prestationText: row.prestation_text,
+    items,
+    termsTitle: row.terms_title,
+    termsText: row.terms_text,
+    signatureLeftLabel: row.signature_left_label,
+    signatureRightLabel: row.signature_right_label,
+  }
+}
+
+ipcMain.handle("quotes:render-preview", (_e, quoteId) => {
+  try {
+    const row = db.getQuoteById(quoteId)
+    if (!row) return { ok: false, error: "Devis introuvable" }
+    const html = renderQuoteHtml(rowToQuoteForRender(row), getClubSettings())
+    return { ok: true, html }
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) }
+  }
+})
+
+ipcMain.handle("quotes:download", async (_e, quoteId) => {
+  try {
+    const row = db.getQuoteById(quoteId)
+    if (!row) return { ok: false, error: "Devis introuvable" }
+    const pdfBuffer = await generateQuotePdf(rowToQuoteForRender(row), getClubSettings())
+    const safeName = (row.recipient_lines.split("\n")[0] || row.number || "devis").replace(/[^a-zA-Z0-9]+/g, "_")
+    const { canceled, filePath } = await dialog.showSaveDialog(mainWindow, {
+      title: "Enregistrer le devis",
+      defaultPath: `Devis_${safeName}.pdf`,
+      filters: [{ name: "PDF", extensions: ["pdf"] }],
+    })
+    if (canceled || !filePath) return { ok: false, canceled: true }
+    fs.writeFileSync(filePath, pdfBuffer)
+    return { ok: true, path: filePath }
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) }
+  }
+})
 
 ipcMain.handle("db:getTransactions", () => db.getTransactions())
 ipcMain.handle("db:createTransaction", (_e, tx) => {

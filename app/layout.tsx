@@ -14,6 +14,7 @@ import { EquipmentProvider } from "@/lib/equipment-store"
 import { FixedAssetsProvider } from "@/lib/fixed-assets-store"
 import { LocaleProvider } from "@/lib/i18n/context"
 import { PayersProvider } from "@/lib/payers-store"
+import { QuotesProvider } from "@/lib/quotes-store"
 import { SeasonsProvider } from "@/lib/seasons-store"
 import { SecureVaultProvider } from "@/lib/secure-vault"
 import { TransactionsProvider } from "@/lib/transactions-store"
@@ -71,13 +72,15 @@ export default function RootLayout({
                           <DebtsProvider>
                             <DisciplinesProvider>
                               <EquipmentProvider>
-                                <AuthProvider>
-                                  <AuthGate>
-                                    <AppShell>{children}</AppShell>
-                                    <VaultUnlockPrompt />
-                                  </AuthGate>
-                                  <Toaster position="top-right" />
-                                </AuthProvider>
+                                <QuotesProvider>
+                                  <AuthProvider>
+                                    <AuthGate>
+                                      <AppShell>{children}</AppShell>
+                                      <VaultUnlockPrompt />
+                                    </AuthGate>
+                                    <Toaster position="top-right" />
+                                  </AuthProvider>
+                                </QuotesProvider>
                               </EquipmentProvider>
                             </DisciplinesProvider>
                           </DebtsProvider>
