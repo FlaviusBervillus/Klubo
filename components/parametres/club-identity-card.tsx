@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/card"
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
 import { useClubSettings } from "@/lib/club-settings"
 import { useTranslation } from "@/lib/i18n/context"
 
@@ -93,6 +94,11 @@ export function ClubIdentityCard() {
   const [address, setAddress] = useState(settings.address)
   const [phone, setPhone] = useState(settings.phone)
   const [rna, setRna] = useState(settings.rna)
+  const [siret, setSiret] = useState(settings.siret)
+  const [iban, setIban] = useState(settings.iban)
+  const [bic, setBic] = useState(settings.bic)
+  const [tvaMention, setTvaMention] = useState(settings.tvaMention)
+  const [insuranceText, setInsuranceText] = useState(settings.insuranceText)
   const [signatoryRole, setSignatoryRole] = useState(settings.signatoryRole ?? "")
 
   useEffect(() => {
@@ -102,6 +108,11 @@ export function ClubIdentityCard() {
     setAddress(settings.address)
     setPhone(settings.phone)
     setRna(settings.rna)
+    setSiret(settings.siret)
+    setIban(settings.iban)
+    setBic(settings.bic)
+    setTvaMention(settings.tvaMention)
+    setInsuranceText(settings.insuranceText)
     setSignatoryRole(settings.signatoryRole ?? "")
   }, [
     settings.name,
@@ -110,6 +121,11 @@ export function ClubIdentityCard() {
     settings.address,
     settings.phone,
     settings.rna,
+    settings.siret,
+    settings.iban,
+    settings.bic,
+    settings.tvaMention,
+    settings.insuranceText,
     settings.signatoryRole,
   ])
 
@@ -126,7 +142,20 @@ export function ClubIdentityCard() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    await update({ name, season, stripeAccountName, address, phone, rna, signatoryRole })
+    await update({
+      name,
+      season,
+      stripeAccountName,
+      address,
+      phone,
+      rna,
+      siret,
+      iban,
+      bic,
+      tvaMention,
+      insuranceText,
+      signatoryRole,
+    })
     toast.success(t.settings.identitySaved)
   }
 
@@ -242,13 +271,63 @@ export function ClubIdentityCard() {
                 />
               </Field>
             </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field>
+                <FieldLabel htmlFor="club-rna">{t.settings.fieldRna}</FieldLabel>
+                <Input
+                  id="club-rna"
+                  value={rna}
+                  onChange={(e) => setRna(e.target.value)}
+                  placeholder="W442029842"
+                />
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="club-siret">{t.settings.fieldSiret}</FieldLabel>
+                <Input
+                  id="club-siret"
+                  value={siret}
+                  onChange={(e) => setSiret(e.target.value)}
+                  placeholder="123 456 789 00012"
+                />
+              </Field>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field>
+                <FieldLabel htmlFor="club-iban">{t.settings.fieldIban}</FieldLabel>
+                <Input
+                  id="club-iban"
+                  value={iban}
+                  onChange={(e) => setIban(e.target.value)}
+                  placeholder="FR76 XXXX XXXX XXXX XXXX XXXX XXX"
+                />
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="club-bic">{t.settings.fieldBic}</FieldLabel>
+                <Input
+                  id="club-bic"
+                  value={bic}
+                  onChange={(e) => setBic(e.target.value)}
+                  placeholder="XXXXXXXX"
+                />
+              </Field>
+            </div>
             <Field>
-              <FieldLabel htmlFor="club-rna">{t.settings.fieldRna}</FieldLabel>
+              <FieldLabel htmlFor="club-tva-mention">{t.settings.fieldTvaMention}</FieldLabel>
               <Input
-                id="club-rna"
-                value={rna}
-                onChange={(e) => setRna(e.target.value)}
-                placeholder="W442029842"
+                id="club-tva-mention"
+                value={tvaMention}
+                onChange={(e) => setTvaMention(e.target.value)}
+                placeholder="TVA non applicable, art. 261-7-1° a du CGI"
+              />
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="club-insurance">{t.settings.fieldInsuranceText}</FieldLabel>
+              <Textarea
+                id="club-insurance"
+                rows={2}
+                value={insuranceText}
+                onChange={(e) => setInsuranceText(e.target.value)}
+                placeholder={t.settings.fieldInsuranceTextPlaceholder}
               />
             </Field>
             <div className="grid gap-4 sm:grid-cols-2">

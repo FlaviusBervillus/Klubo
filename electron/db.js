@@ -202,6 +202,7 @@ function migrate(db) {
       items_json TEXT NOT NULL DEFAULT '[]',
       terms_title TEXT NOT NULL DEFAULT '',
       terms_text TEXT NOT NULL DEFAULT '',
+      validity_text TEXT NOT NULL DEFAULT '',
       signature_left_label TEXT NOT NULL DEFAULT '',
       signature_right_label TEXT NOT NULL DEFAULT '',
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
@@ -221,6 +222,9 @@ function migrate(db) {
   // Facture réellement générée par Stripe (Stripe Invoicing) pour cette charge, quand elle existe :
   // on préfère toujours la vraie facture Stripe à celle que l'on génère nous-mêmes.
   ensureColumn(db, "transactions", "stripe_invoice_pdf_url", "stripe_invoice_pdf_url TEXT")
+  // Ajouté après la sortie initiale du devis : les devis déjà créés n'ont pas cette colonne tant
+  // que ce IF NOT EXISTS ne la crée pas explicitement.
+  ensureColumn(db, "quotes", "validity_text", "validity_text TEXT NOT NULL DEFAULT ''")
 
   migrateSeasonMembershipBackfill(db)
   migrateDisciplinesBackfill(db)
@@ -1310,6 +1314,7 @@ const QUOTE_FIELD_TO_COLUMN = {
   itemsJson: "items_json",
   termsTitle: "terms_title",
   termsText: "terms_text",
+  validityText: "validity_text",
   signatureLeftLabel: "signature_left_label",
   signatureRightLabel: "signature_right_label",
 }

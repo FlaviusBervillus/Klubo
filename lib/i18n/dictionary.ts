@@ -314,6 +314,12 @@ export interface Dictionary {
     fieldAddress: string
     fieldPhone: string
     fieldRna: string
+    fieldSiret: string
+    fieldIban: string
+    fieldBic: string
+    fieldTvaMention: string
+    fieldInsuranceText: string
+    fieldInsuranceTextPlaceholder: string
     changeLogo: string
     removeLogo: string
     fieldStamp: string
@@ -638,6 +644,8 @@ export interface Dictionary {
     fieldNumber: string
     fieldNumberPlaceholder: string
     fieldDate: string
+    fieldValidity: string
+    fieldValidityPlaceholder: string
     fieldEmitter: string
     fieldRecipient: string
     fieldRecipientPlaceholder: string

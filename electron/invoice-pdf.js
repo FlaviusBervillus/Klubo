@@ -183,7 +183,15 @@ function renderInvoiceHtml(tx, club, client) {
     <div class="paid"><span>Montant payé</span><span>${formatEuro(tx.amount)}</span></div>
   </div>
 
-  ${club.rna ? `<div class="rna">RNA : ${escapeHtml(club.rna)}</div>` : ""}
+  ${
+    club.rna || club.siret || club.tvaMention
+      ? `<div class="rna">
+          ${club.rna ? `<div>RNA : ${escapeHtml(club.rna)}</div>` : ""}
+          ${club.siret ? `<div>SIRET : ${escapeHtml(club.siret)}</div>` : ""}
+          ${club.tvaMention ? `<div>${escapeHtml(club.tvaMention)}</div>` : ""}
+        </div>`
+      : ""
+  }
 
   ${
     club.stampUrl || club.signatureUrl

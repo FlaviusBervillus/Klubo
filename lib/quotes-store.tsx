@@ -33,6 +33,7 @@ export interface Quote {
   items: QuoteItem[]
   termsTitle: string
   termsText: string
+  validityText: string
   signatureLeftLabel: string
   signatureRightLabel: string
   createdAt: string
@@ -61,6 +62,7 @@ function rowToQuote(row: DbQuote): Quote {
     items,
     termsTitle: row.terms_title,
     termsText: row.terms_text,
+    validityText: row.validity_text,
     signatureLeftLabel: row.signature_left_label,
     signatureRightLabel: row.signature_right_label,
     createdAt: row.created_at,

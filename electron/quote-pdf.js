@@ -34,13 +34,15 @@ function linesHtml(text) {
     .join("")
 }
 
+/** Même gabarit visuel que les factures (electron/invoice-pdf.js) : mêmes classes CSS, même logo
+ * rond en haut à droite, même mise en page en colonnes — pour que devis et factures se ressemblent
+ * à l'écran comme à l'impression. */
 function renderQuoteHtml(quote, club) {
   const items = Array.isArray(quote.items) ? quote.items : []
   const rows = items.map((item) => {
     const qty = Number(item.qty) || 0
     const unitPrice = Number(item.unitPrice) || 0
-    const amount = qty * unitPrice
-    return { ...item, qty, unitPrice, amount }
+    return { ...item, qty, unitPrice, amount: qty * unitPrice }
   })
   const total = rows.reduce((sum, r) => sum + r.amount, 0)
 
@@ -50,141 +52,149 @@ function renderQuoteHtml(quote, club) {
 <meta charset="utf-8" />
 <style>
   * { box-sizing: border-box; }
-  body { font-family: -apple-system, "Helvetica Neue", Arial, sans-serif; color: #1a1a1a; font-size: 13px; margin: 0; }
-  .page { padding: 0 0 48px 0; }
-  .header { background: #15293e; color: #fff; padding: 36px 48px; display: flex; justify-content: space-between; align-items: flex-start; }
-  .header h1 { font-size: 28px; margin: 0; letter-spacing: 0.5px; }
-  .header .doc-title { font-size: 28px; font-weight: 700; letter-spacing: 1px; }
-  .header .subtitle { margin-top: 6px; font-size: 14px; color: #cdd7e1; }
-  .header .season { margin-top: 2px; font-size: 13px; color: #9fb0c3; }
-  .body { padding: 24px 48px 0 48px; }
-  .meta-row { display: flex; justify-content: space-between; font-size: 12.5px; color: #333; margin-bottom: 20px; }
-  .columns { display: flex; justify-content: space-between; gap: 32px; margin-bottom: 20px; }
+  body { font-family: -apple-system, "Helvetica Neue", Arial, sans-serif; color: #1a1a1a; padding: 48px; font-size: 13px; }
+  h1 { font-size: 26px; margin: 0; }
+  .top-row { display: flex; justify-content: space-between; align-items: flex-start; }
+  .top-row .titles { display: flex; flex-direction: column; gap: 4px; }
+  .subtitle { color: #555; }
+  .season { color: #888; font-size: 12px; }
+  .meta-row { margin: 24px 0; display: flex; justify-content: space-between; }
+  .meta-label { font-weight: 600; }
+  .columns { display: flex; justify-content: space-between; gap: 32px; margin-bottom: 24px; }
   .col { flex: 1; line-height: 1.5; }
-  .col-title { color: #0f7173; font-weight: 700; font-size: 12px; letter-spacing: 0.5px; margin-bottom: 6px; }
-  .col .name { font-weight: 700; margin-bottom: 2px; }
-  .info-box { background: #eef3f6; border-radius: 6px; padding: 16px 20px; margin-bottom: 20px; }
-  .info-box .col-title { margin-bottom: 8px; }
-  .info-box .info-name { font-weight: 700; margin-bottom: 4px; }
-  .section-title { color: #0f7173; font-weight: 700; font-size: 12px; letter-spacing: 0.5px; margin-bottom: 6px; }
-  .prestation-dates { font-weight: 700; margin-bottom: 8px; }
-  .prestation-text { line-height: 1.6; margin-bottom: 16px; }
-  table { width: 100%; border-collapse: collapse; margin-top: 4px; }
-  thead th { text-align: left; background: #15293e; color: #fff; font-size: 11px; font-weight: 600; padding: 10px 12px; }
+  .club-name { font-weight: 600; }
+  .logo { width: 108px; height: 108px; border-radius: 50%; object-fit: cover; }
+  .info-box { background: #f6f6f6; border-radius: 8px; padding: 14px 18px; margin: 24px 0; line-height: 1.6; }
+  .section-label { font-weight: 600; margin: 24px 0 8px 0; }
+  .section-text { line-height: 1.6; white-space: pre-wrap; }
+  table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+  thead th { text-align: left; font-size: 11px; color: #666; font-weight: 400; border-bottom: 1px solid #ddd; padding-bottom: 6px; }
   thead th.num { text-align: right; }
-  tbody td { padding: 12px; border-bottom: 1px solid #e5e5e5; vertical-align: top; }
+  tbody td { padding: 10px 0; border-bottom: 1px solid #eee; vertical-align: top; }
   tbody td.num { text-align: right; white-space: nowrap; }
-  tbody .item-label { font-weight: 700; }
-  tbody .item-description { color: #666; font-size: 12px; margin-top: 2px; }
-  .total-row { display: flex; justify-content: flex-end; margin: 16px 0 24px 0; }
-  .total-badge { display: flex; align-items: center; gap: 24px; background: #0f7173; color: #fff; border-radius: 6px; padding: 10px 20px; font-weight: 700; }
-  .total-badge .amount { font-size: 18px; }
-  .terms-text { line-height: 1.6; margin-bottom: 32px; white-space: pre-wrap; }
-  .sign-row { display: flex; justify-content: space-between; gap: 32px; margin-top: 16px; }
-  .sign-col { flex: 1; }
-  .sign-col .label { font-weight: 700; margin-bottom: 24px; }
-  .sign-col .hint { color: #666; font-size: 12px; }
-  .footer { padding: 16px 48px 0 48px; border-top: 1px solid #eee; margin-top: 32px; color: #999; font-size: 10.5px; }
+  tbody .item-description { color: #888; font-size: 11.5px; margin-top: 2px; }
+  .totals { margin-top: 8px; width: 260px; margin-left: auto; }
+  .totals div { display: flex; justify-content: space-between; padding: 4px 0; }
+  .totals .total { font-weight: 700; border-top: 1px solid #ddd; padding-top: 8px; margin-top: 4px; }
+  .validity { color: #888; font-size: 12px; margin: -16px 0 24px 0; }
+  .legal-box { margin-top: 32px; padding-top: 12px; border-top: 1px solid #ddd; color: #666; font-size: 11px; line-height: 1.7; }
+  .sign-row { display: flex; justify-content: space-between; align-items: flex-end; gap: 32px; margin-top: 48px; }
+  .sign-block { display: flex; flex: 1; flex-direction: column; align-items: center; gap: 4px; }
+  .signature { max-height: 60px; max-width: 160px; object-fit: contain; }
+  .sign-label { font-size: 11px; color: #888; border-top: 1px solid #ddd; padding-top: 4px; width: 100%; text-align: center; }
+  .stamp { max-height: 90px; max-width: 90px; object-fit: contain; align-self: center; }
+  .footer { position: fixed; bottom: 24px; left: 48px; right: 48px; border-top: 1px solid #ddd; padding-top: 8px; text-align: right; font-size: 11px; color: #888; }
 </style>
 </head>
 <body>
-  <div class="page">
-    <div class="header">
-      <div>
-        <h1>${escapeHtml(club.name)}</h1>
-        ${quote.subtitle ? `<div class="subtitle">${escapeHtml(quote.subtitle)}</div>` : ""}
-        ${quote.seasonLabel ? `<div class="season">${escapeHtml(quote.seasonLabel)}</div>` : ""}
-      </div>
-      <div class="doc-title">${escapeHtml(quote.title || "DEVIS")}</div>
+  <div class="top-row">
+    <div class="titles">
+      <h1>${escapeHtml(quote.title || "DEVIS")}</h1>
+      ${quote.subtitle ? `<div class="subtitle">${escapeHtml(quote.subtitle)}</div>` : ""}
+      ${quote.seasonLabel ? `<div class="season">${escapeHtml(quote.seasonLabel)}</div>` : ""}
     </div>
-
-    <div class="body">
-      <div class="meta-row">
-        <span>Date : ${formatLongDate(quote.date)}</span>
-        <span>N° du devis : ${quote.number ? escapeHtml(quote.number) : "à renseigner"}</span>
-      </div>
-
-      <div class="columns">
-        <div class="col">
-          <div class="col-title">ÉMETTEUR</div>
-          ${linesHtml(quote.emitterLines)}
-        </div>
-        <div class="col">
-          <div class="col-title">DESTINATAIRE</div>
-          ${linesHtml(quote.recipientLines)}
-        </div>
-      </div>
-
-      ${
-        quote.infoTitle || quote.infoText
-          ? `<div class="info-box">
-              ${quote.infoTitle ? `<div class="col-title">${escapeHtml(quote.infoTitle)}</div>` : ""}
-              ${quote.infoText ? `<div>${linesHtml(quote.infoText)}</div>` : ""}
-            </div>`
-          : ""
-      }
-
-      ${quote.prestationTitle ? `<div class="section-title">${escapeHtml(quote.prestationTitle)}</div>` : ""}
-      ${quote.prestationText ? `<div class="prestation-text">${linesHtml(quote.prestationText)}</div>` : ""}
-
-      ${
-        rows.length > 0
-          ? `<table>
-              <thead>
-                <tr>
-                  <th>Désignation</th>
-                  <th class="num">Qté</th>
-                  <th class="num">Prix unitaire</th>
-                  <th class="num">Montant</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${rows
-                  .map(
-                    (r) => `<tr>
-                      <td>
-                        <div class="item-label">${escapeHtml(r.label)}</div>
-                        ${r.description ? `<div class="item-description">${escapeHtml(r.description)}</div>` : ""}
-                      </td>
-                      <td class="num">${r.qty}</td>
-                      <td class="num">${formatEuro(r.unitPrice)}</td>
-                      <td class="num">${formatEuro(r.amount)}</td>
-                    </tr>`,
-                  )
-                  .join("")}
-              </tbody>
-            </table>
-
-            <div class="total-row">
-              <div class="total-badge">
-                <span>TOTAL CONVENU</span>
-                <span class="amount">${formatEuro(total)}</span>
-              </div>
-            </div>`
-          : ""
-      }
-
-      ${quote.termsTitle ? `<div class="section-title">${escapeHtml(quote.termsTitle)}</div>` : ""}
-      ${quote.termsText ? `<div class="terms-text">${escapeHtml(quote.termsText)}</div>` : ""}
-
-      ${
-        quote.signatureLeftLabel || quote.signatureRightLabel
-          ? `<div class="sign-row">
-              <div class="sign-col">
-                ${quote.signatureLeftLabel ? `<div class="label">${escapeHtml(quote.signatureLeftLabel)}</div>` : ""}
-                <div class="hint">Nom, date, signature${quote.signatureLeftLabel ? " et cachet" : ""} :</div>
-              </div>
-              <div class="sign-col">
-                ${quote.signatureRightLabel ? `<div class="label">${escapeHtml(quote.signatureRightLabel)}</div>` : ""}
-                <div class="hint">Nom, date et signature :</div>
-              </div>
-            </div>`
-          : ""
-      }
-    </div>
-
-    <div class="footer">${escapeHtml(club.name)}${club.rna ? ` — RNA : ${escapeHtml(club.rna)}` : ""}</div>
+    ${club.logoUrl ? `<img class="logo" src="${club.logoUrl}" alt="" />` : ""}
   </div>
+
+  <div class="meta-row">
+    <span><span class="meta-label">Date</span> &nbsp; ${formatLongDate(quote.date)}</span>
+    <span><span class="meta-label">N° du devis</span> &nbsp; ${quote.number ? escapeHtml(quote.number) : "à renseigner"}</span>
+  </div>
+
+  ${quote.validityText ? `<div class="validity">${escapeHtml(quote.validityText)}</div>` : ""}
+
+  <div class="columns">
+    <div class="col">
+      <div class="meta-label">Émetteur</div>
+      ${linesHtml(quote.emitterLines)}
+    </div>
+    <div class="col">
+      <div class="meta-label">Destinataire</div>
+      ${linesHtml(quote.recipientLines)}
+    </div>
+  </div>
+
+  ${
+    quote.infoTitle || quote.infoText
+      ? `<div class="info-box">
+          ${quote.infoTitle ? `<div class="club-name">${escapeHtml(quote.infoTitle)}</div>` : ""}
+          ${linesHtml(quote.infoText)}
+        </div>`
+      : ""
+  }
+
+  ${quote.prestationTitle ? `<div class="section-label">${escapeHtml(quote.prestationTitle)}</div>` : ""}
+  ${quote.prestationText ? `<div class="section-text">${escapeHtml(quote.prestationText)}</div>` : ""}
+
+  ${
+    rows.length > 0
+      ? `<table>
+          <thead>
+            <tr>
+              <th>Désignation</th>
+              <th class="num">Qté</th>
+              <th class="num">Prix unitaire</th>
+              <th class="num">Montant</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rows
+              .map(
+                (r) => `<tr>
+                  <td>
+                    ${escapeHtml(r.label)}
+                    ${r.description ? `<div class="item-description">${escapeHtml(r.description)}</div>` : ""}
+                  </td>
+                  <td class="num">${r.qty}</td>
+                  <td class="num">${formatEuro(r.unitPrice)}</td>
+                  <td class="num">${formatEuro(r.amount)}</td>
+                </tr>`,
+              )
+              .join("")}
+          </tbody>
+        </table>
+
+        <div class="totals">
+          <div class="total"><span>Total</span><span>${formatEuro(total)}</span></div>
+        </div>`
+      : ""
+  }
+
+  ${quote.termsTitle ? `<div class="section-label">${escapeHtml(quote.termsTitle)}</div>` : ""}
+  ${quote.termsText ? `<div class="section-text">${escapeHtml(quote.termsText)}</div>` : ""}
+
+  ${
+    club.rna || club.siret || club.tvaMention || club.iban || club.insuranceText
+      ? `<div class="legal-box">
+          ${club.rna ? `<div>RNA : ${escapeHtml(club.rna)}</div>` : ""}
+          ${club.siret ? `<div>SIRET : ${escapeHtml(club.siret)}</div>` : ""}
+          ${club.tvaMention ? `<div>${escapeHtml(club.tvaMention)}</div>` : ""}
+          ${
+            club.iban
+              ? `<div>Coordonnées bancaires : IBAN ${escapeHtml(club.iban)}${club.bic ? ` — BIC ${escapeHtml(club.bic)}` : ""}</div>`
+              : ""
+          }
+          ${club.insuranceText ? `<div>${escapeHtml(club.insuranceText)}</div>` : ""}
+        </div>`
+      : ""
+  }
+
+  ${
+    quote.signatureLeftLabel || quote.signatureRightLabel
+      ? `<div class="sign-row">
+          <div class="sign-block">
+            <span class="sign-label">${quote.signatureLeftLabel ? escapeHtml(quote.signatureLeftLabel) : "Signature"}</span>
+          </div>
+          <div class="sign-block">
+            ${club.stampUrl ? `<img class="stamp" src="${club.stampUrl}" alt="" />` : ""}
+            ${club.signatureUrl ? `<img class="signature" src="${club.signatureUrl}" alt="" />` : ""}
+            <span class="sign-label">${quote.signatureRightLabel ? escapeHtml(quote.signatureRightLabel) : "Signature"}</span>
+          </div>
+        </div>`
+      : ""
+  }
+
+  <div class="footer">Page 1 sur 1</div>
 </body>
 </html>`
 }

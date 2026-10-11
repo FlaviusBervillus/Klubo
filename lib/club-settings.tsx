@@ -10,6 +10,11 @@ export interface ClubSettings {
   address: string
   phone: string
   rna: string
+  siret: string
+  iban: string
+  bic: string
+  tvaMention: string
+  insuranceText: string
   stampUrl: string | null
   signatureUrl: string | null
   signatoryRole: string | null
@@ -23,6 +28,11 @@ const defaultSettings: ClubSettings = {
   address: "",
   phone: "",
   rna: "",
+  siret: "",
+  iban: "",
+  bic: "",
+  tvaMention: "",
+  insuranceText: "",
   stampUrl: null,
   signatureUrl: null,
   signatoryRole: null,
@@ -55,6 +65,11 @@ export function ClubSettingsProvider({ children }: { children: React.ReactNode }
           address: row.clubAddress ?? "",
           phone: row.clubPhone ?? "",
           rna: row.clubRna ?? "",
+          siret: row.clubSiret ?? "",
+          iban: row.clubIban ?? "",
+          bic: row.clubBic ?? "",
+          tvaMention: row.clubTvaMention ?? "",
+          insuranceText: row.clubInsuranceText ?? "",
           stampUrl: row.clubStampUrl ?? null,
           signatureUrl: row.clubSignatureUrl ?? null,
           signatoryRole: row.clubSignatoryRole ?? null,
@@ -81,6 +96,13 @@ export function ClubSettingsProvider({ children }: { children: React.ReactNode }
     if (patch.address !== undefined) await electronApi.db.setSetting("clubAddress", patch.address)
     if (patch.phone !== undefined) await electronApi.db.setSetting("clubPhone", patch.phone)
     if (patch.rna !== undefined) await electronApi.db.setSetting("clubRna", patch.rna)
+    if (patch.siret !== undefined) await electronApi.db.setSetting("clubSiret", patch.siret)
+    if (patch.iban !== undefined) await electronApi.db.setSetting("clubIban", patch.iban)
+    if (patch.bic !== undefined) await electronApi.db.setSetting("clubBic", patch.bic)
+    if (patch.tvaMention !== undefined) await electronApi.db.setSetting("clubTvaMention", patch.tvaMention)
+    if (patch.insuranceText !== undefined) {
+      await electronApi.db.setSetting("clubInsuranceText", patch.insuranceText)
+    }
     if (patch.stampUrl !== undefined) {
       await electronApi.db.setSetting("clubStampUrl", patch.stampUrl ?? "")
     }

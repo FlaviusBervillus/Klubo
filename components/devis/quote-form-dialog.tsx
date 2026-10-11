@@ -47,6 +47,7 @@ function emptyForm(clubName: string, clubAddress: string, clubPhone: string): Ne
     items: [emptyItem()],
     termsTitle: "MODALITÉS",
     termsText: "",
+    validityText: "",
     signatureLeftLabel: "Bon pour accord",
     signatureRightLabel: "Pour l'association",
   }
@@ -177,6 +178,15 @@ export function QuoteFormDialog({ quote }: { quote?: Quote } = {}) {
                   />
                 </Field>
               </div>
+              <Field>
+                <FieldLabel htmlFor="quote-validity">{t.devis.fieldValidity}</FieldLabel>
+                <Input
+                  id="quote-validity"
+                  placeholder={t.devis.fieldValidityPlaceholder}
+                  value={form.validityText}
+                  onChange={(e) => setForm((f) => ({ ...f, validityText: e.target.value }))}
+                />
+              </Field>
             </FieldGroup>
 
             <div className="grid grid-cols-2 gap-3">

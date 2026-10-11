@@ -147,6 +147,7 @@ export interface DbQuote {
   items_json: string
   terms_title: string
   terms_text: string
+  validity_text: string
   signature_left_label: string
   signature_right_label: string
   created_at: string
