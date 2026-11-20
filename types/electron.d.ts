@@ -39,6 +39,7 @@ export interface DbClient {
   city: string
   payer_id: string | null
   board_role: string | null
+  payer_relationship: string | null
 }
 
 export interface DbPayer {
@@ -319,7 +320,7 @@ declare global {
         write: (payload: VaultRow) => Promise<void>
       }
       resetAppData: () => Promise<void>
-      prepareReceipt: (transactionId: string) => Promise<
+      prepareReceipt: (transactionId: string, forcedClientId?: string | null) => Promise<
         | {
             ok: true
             tx: { id: string; description: string; amount: number; date: string; method: string }
@@ -331,13 +332,15 @@ declare global {
       renderReceiptPreview: (
         transactionId: string,
         overrides?: ReceiptOverrides,
+        forcedClientId?: string | null,
       ) => Promise<{ ok: true; html: string } | { ok: false; error?: string }>
       downloadReceipt: (
         transactionId: string,
         overrides?: ReceiptOverrides,
+        forcedClientId?: string | null,
       ) => Promise<{ ok: true; path: string } | { ok: false; error?: string; canceled?: boolean }>
       downloadReceiptsBulk: (
-        items: { transactionId: string; firstName: string; lastName: string }[],
+        items: { transactionId: string; clientId: string; firstName: string; lastName: string }[],
       ) => Promise<
         | { ok: true; count: number; dir: string; errors: string[] }
         | { ok: false; error?: string; canceled?: boolean }

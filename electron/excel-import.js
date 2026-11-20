@@ -1,8 +1,15 @@
 const crypto = require("crypto")
+const fs = require("fs")
 const path = require("path")
 const ExcelJS = require("exceljs")
 const db = require("./db")
 const { matchCourseLabel } = require("./course-matching")
+
+// Un fichier d'import club tient largement sous 1 Mo (quelques centaines de lignes) : ce plafond
+// généreux bloque les fichiers Excel/CSV anormalement volumineux avant même de les parser, en
+// mitigation des failles connues d'exceljs exploitables via un fichier surdimensionné (déni de
+// service par épuisement mémoire/CPU) — aucun correctif amont n'existe à ce jour pour ces failles.
+const MAX_IMPORT_FILE_SIZE = 15 * 1024 * 1024
 
 /** camelCase (utilisé dans les patchs) -> colonne SQL, pour pouvoir sauvegarder la valeur
  * précédente d'un champ avant de l'écraser et ainsi permettre l'annulation d'un import. */
@@ -114,6 +121,12 @@ function clientFullName(client) {
 /** Lit le fichier (Excel ou CSV — un export Notion sort en CSV) et le transforme en lignes
  * exploitables (sans toucher à la base). */
 async function parseExcelFile(filePath) {
+  const { size } = fs.statSync(filePath)
+  if (size > MAX_IMPORT_FILE_SIZE) {
+    throw new Error(
+      `Fichier trop volumineux (${(size / (1024 * 1024)).toFixed(1)} Mo, limite ${MAX_IMPORT_FILE_SIZE / (1024 * 1024)} Mo) : vérifiez qu'il s'agit bien d'un export club.`,
+    )
+  }
   const workbook = new ExcelJS.Workbook()
   const isCsv = path.extname(filePath).toLowerCase() === ".csv"
   const sheet = isCsv

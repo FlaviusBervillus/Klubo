@@ -303,9 +303,6 @@ export function TransactionDetailView() {
                     }}
                   />
                   <datalist id="linked-payer-suggestions">
-                    {clients.map((c) => (
-                      <option key={c.id} value={`${c.firstName} ${c.lastName}`.trim()} />
-                    ))}
                     {payers.map((p) => (
                       <option key={p.id} value={`${p.firstName} ${p.lastName}`.trim()} />
                     ))}

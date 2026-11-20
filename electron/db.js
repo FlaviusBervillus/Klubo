@@ -219,6 +219,25 @@ function migrate(db) {
   // contenait des données réelles, au cas où une ancienne sauvegarde/export y ferait encore référence.
   ensureColumn(db, "clients", "guardian_id", "guardian_id TEXT")
   ensureColumn(db, "clients", "payer_id", "payer_id TEXT")
+  // Nature du lien avec le payeur, choisie explicitement depuis la fiche payeur (voir
+  // components/payeurs/add-payer-dialog.tsx) plutôt que devinée par comparaison de noms :
+  // "self" = le payeur est cet adhérent lui-même (il règle sa propre cotisation), "child" = un
+  // enfant dont le payeur (parent) règle la cotisation. Détermine qui est facturé (voir
+  // resolveClientForInvoice dans electron/main.js).
+  ensureColumn(db, "clients", "payer_relationship", "payer_relationship TEXT")
+  // Rétro-compatibilité : les liens payer_id posés avant l'ajout de cette colonne n'ont pas encore
+  // de valeur — on la déduit une bonne fois par comparaison de noms (même nom que le payeur = lui-
+  // même, sinon un enfant), au lieu de reproduire cette heuristique à chaque lecture.
+  db.prepare(
+    `UPDATE clients SET payer_relationship = (
+       CASE WHEN EXISTS (
+         SELECT 1 FROM payers p
+         WHERE p.id = clients.payer_id
+           AND lower(trim(p.first_name || ' ' || p.last_name)) = lower(trim(clients.first_name || ' ' || clients.last_name))
+       ) THEN 'self' ELSE 'child' END
+     )
+     WHERE payer_id IS NOT NULL AND payer_relationship IS NULL`,
+  ).run()
   // Membre du bureau (trésorier, président...) : non null = exonéré de cotisation, le texte sert de
   // libellé de rôle imprimé sur la facture à 0 € générée pour lui (voir receipts:*-virtual).
   ensureColumn(db, "clients", "board_role", "board_role TEXT")
@@ -226,6 +245,10 @@ function migrate(db) {
   // PAYEUR tel qu'il apparaît sur le règlement) : utile quand un parent et son enfant sont tous les
   // deux adhérents mais qu'un seul paie — la facture doit nommer l'enfant, pas le parent qui a réglé.
   ensureColumn(db, "transactions", "linked_client_id", "linked_client_id TEXT")
+  // Une fois que le trésorier a corrigé à la main le nom d'un payeur (ex. mise en forme NOM/Prénom,
+  // faute de frappe Stripe), une resynchro Stripe ne doit plus jamais l'écraser — voir
+  // upsertPayerByStripeId/upsertGuestPayer.
+  ensureColumn(db, "payers", "name_manually_edited", "name_manually_edited INTEGER NOT NULL DEFAULT 0")
   // Facture réellement générée par Stripe (Stripe Invoicing) pour cette charge, quand elle existe :
   // on préfère toujours la vraie facture Stripe à celle que l'on génère nous-mêmes.
   ensureColumn(db, "transactions", "stripe_invoice_pdf_url", "stripe_invoice_pdf_url TEXT")
@@ -435,13 +458,21 @@ function getClients() {
 }
 
 function createClient(client) {
+  // node:sqlite refuse tout paramètre nommé non référencé dans la requête : on construit l'objet
+  // passé à .run() champ par champ plutôt que de "spreader" `client` (qui peut porter d'autres clés
+  // ajoutées côté renderer), pour ne jamais recasser silencieusement cet insert à chaque nouveau champ.
   getDb()
     .prepare(
-      `INSERT INTO clients (id, first_name, last_name, email, status, method, paid, address, phone, birth_date, postal_code, city, payer_id, board_role)
-       VALUES (@id, @firstName, @lastName, @email, @status, @method, @paid, @address, @phone, @birthDate, @postalCode, @city, @payerId, @boardRole)`,
+      `INSERT INTO clients (id, first_name, last_name, email, status, method, paid, address, phone, birth_date, postal_code, city, payer_id, board_role, payer_relationship)
+       VALUES (@id, @firstName, @lastName, @email, @status, @method, @paid, @address, @phone, @birthDate, @postalCode, @city, @payerId, @boardRole, @payerRelationship)`,
     )
     .run({
-      ...client,
+      id: client.id,
+      firstName: client.firstName,
+      lastName: client.lastName,
+      email: client.email,
+      status: client.status,
+      method: client.method,
       paid: client.paid ? 1 : 0,
       address: client.address ?? "",
       phone: client.phone ?? "",
@@ -450,6 +481,7 @@ function createClient(client) {
       city: client.city ?? "",
       payerId: client.payerId ?? null,
       boardRole: client.boardRole ?? null,
+      payerRelationship: client.payerRelationship ?? null,
     })
 }
 
@@ -506,6 +538,12 @@ function updatePayer(id, patch) {
     }
   }
   if (fields.length === 0) return
+  // Dès qu'un nom/prénom est corrigé à la main, on le protège définitivement d'un écrasement par la
+  // prochaine synchro Stripe (voir upsertPayerByStripeId) — sans ça la correction disparaissait au
+  // sync suivant, ce qui rendait l'édition manuelle inutile.
+  if (patch.firstName !== undefined || patch.lastName !== undefined) {
+    fields.push("name_manually_edited = 1")
+  }
   getDb().prepare(`UPDATE payers SET ${fields.join(", ")} WHERE id = @id`).run(params)
 }
 
@@ -556,31 +594,45 @@ function ensurePayerForClient(clientId) {
  * payeur (avec l'id Stripe cette fois), détaché des adhérents déjà liés au premier, et plus aucune
  * mise à jour automatique de cours ne fonctionnerait pour eux. */
 function upsertPayerByStripeId(payer) {
-  const byStripeId = getDb().prepare("SELECT id FROM payers WHERE stripe_customer_id = ?").get(payer.stripeCustomerId)
+  const byStripeId = getDb().prepare("SELECT id, name_manually_edited FROM payers WHERE stripe_customer_id = ?").get(payer.stripeCustomerId)
   if (byStripeId) {
-    getDb()
-      .prepare(
-        `UPDATE payers SET first_name=@firstName, last_name=@lastName, email=@email WHERE stripe_customer_id=@stripeCustomerId`,
-      )
-      .run(payer)
+    if (byStripeId.name_manually_edited) {
+      // node:sqlite refuse les paramètres nommés surnuméraires : on ne peut pas réutiliser l'objet
+      // "payer" tel quel (il porte aussi firstName/lastName, absents de cette requête).
+      getDb()
+        .prepare(`UPDATE payers SET email=@email WHERE stripe_customer_id=@stripeCustomerId`)
+        .run({ email: payer.email, stripeCustomerId: payer.stripeCustomerId })
+    } else {
+      getDb()
+        .prepare(
+          `UPDATE payers SET first_name=@firstName, last_name=@lastName, email=@email WHERE stripe_customer_id=@stripeCustomerId`,
+        )
+        .run(payer)
+    }
     return byStripeId.id
   }
 
   if (payer.email) {
     const byEmail = getDb()
-      .prepare("SELECT id, stripe_customer_id FROM payers WHERE email <> '' AND lower(email) = lower(?)")
+      .prepare("SELECT id, stripe_customer_id, name_manually_edited FROM payers WHERE email <> '' AND lower(email) = lower(?)")
       .get(payer.email)
     if (byEmail && !byEmail.stripe_customer_id) {
-      getDb()
-        .prepare(
-          `UPDATE payers SET stripe_customer_id=@stripeCustomerId, first_name=@firstName, last_name=@lastName WHERE id=@id`,
-        )
-        .run({
-          stripeCustomerId: payer.stripeCustomerId,
-          firstName: payer.firstName,
-          lastName: payer.lastName,
-          id: byEmail.id,
-        })
+      if (byEmail.name_manually_edited) {
+        getDb()
+          .prepare(`UPDATE payers SET stripe_customer_id=@stripeCustomerId WHERE id=@id`)
+          .run({ stripeCustomerId: payer.stripeCustomerId, id: byEmail.id })
+      } else {
+        getDb()
+          .prepare(
+            `UPDATE payers SET stripe_customer_id=@stripeCustomerId, first_name=@firstName, last_name=@lastName WHERE id=@id`,
+          )
+          .run({
+            stripeCustomerId: payer.stripeCustomerId,
+            firstName: payer.firstName,
+            lastName: payer.lastName,
+            id: byEmail.id,
+          })
+      }
       return byEmail.id
     }
   }
@@ -592,12 +644,18 @@ function upsertPayerByStripeId(payer) {
  * email, ou par nom si Stripe ne fournit aucun email. */
 function findGuestPayer({ email, firstName, lastName }) {
   if (email) {
-    return getDb().prepare("SELECT id FROM payers WHERE stripe_customer_id IS NULL AND email = ?").get(email)
+    return getDb()
+      .prepare("SELECT id, name_manually_edited FROM payers WHERE stripe_customer_id IS NULL AND email = ?")
+      .get(email)
   }
+  // Insensible à la casse : une fois le nom corrigé à la main (ex. mise en forme NOM/Prénom), le
+  // texte brut renvoyé par Stripe à la prochaine synchro ne correspond plus caractère pour
+  // caractère — sans ça, on créerait un doublon au lieu de retrouver ce payeur "invité".
   return getDb()
     .prepare(
-      `SELECT id FROM payers
-       WHERE stripe_customer_id IS NULL AND (email IS NULL OR email = '') AND first_name = @firstName AND last_name = @lastName`,
+      `SELECT id, name_manually_edited FROM payers
+       WHERE stripe_customer_id IS NULL AND (email IS NULL OR email = '')
+         AND lower(first_name) = lower(@firstName) AND lower(last_name) = lower(@lastName)`,
     )
     .get({ firstName, lastName })
 }
@@ -605,9 +663,11 @@ function findGuestPayer({ email, firstName, lastName }) {
 function upsertGuestPayer(payer) {
   const existing = findGuestPayer(payer)
   if (existing) {
-    getDb()
-      .prepare(`UPDATE payers SET first_name=@firstName, last_name=@lastName WHERE id=@id`)
-      .run({ firstName: payer.firstName, lastName: payer.lastName, id: existing.id })
+    if (!existing.name_manually_edited) {
+      getDb()
+        .prepare(`UPDATE payers SET first_name=@firstName, last_name=@lastName WHERE id=@id`)
+        .run({ firstName: payer.firstName, lastName: payer.lastName, id: existing.id })
+    }
     return existing.id
   }
   return createPayer({ ...payer, email: payer.email || "" })
@@ -737,6 +797,7 @@ function updateClient(id, patch) {
     ["city", "city"],
     ["payerId", "payer_id"],
     ["boardRole", "board_role"],
+    ["payerRelationship", "payer_relationship"],
   ]) {
     if (patch[key] !== undefined) {
       fields.push(`${column} = @${key}`)

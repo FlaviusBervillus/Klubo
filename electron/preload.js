@@ -88,11 +88,12 @@ contextBridge.exposeInMainWorld("electronAPI", {
     write: (payload) => ipcRenderer.invoke("vault:write", payload),
   },
   resetAppData: () => ipcRenderer.invoke("app:reset-data"),
-  prepareReceipt: (transactionId) => ipcRenderer.invoke("receipts:prepare", transactionId),
-  renderReceiptPreview: (transactionId, overrides) =>
-    ipcRenderer.invoke("receipts:render-preview", transactionId, overrides),
-  downloadReceipt: (transactionId, overrides) =>
-    ipcRenderer.invoke("receipts:download", transactionId, overrides),
+  prepareReceipt: (transactionId, forcedClientId) =>
+    ipcRenderer.invoke("receipts:prepare", transactionId, forcedClientId),
+  renderReceiptPreview: (transactionId, overrides, forcedClientId) =>
+    ipcRenderer.invoke("receipts:render-preview", transactionId, overrides, forcedClientId),
+  downloadReceipt: (transactionId, overrides, forcedClientId) =>
+    ipcRenderer.invoke("receipts:download", transactionId, overrides, forcedClientId),
   downloadReceiptsBulk: (items) => ipcRenderer.invoke("receipts:download-bulk", items),
   renderReceiptPreviewVirtual: (overrides) =>
     ipcRenderer.invoke("receipts:render-preview-virtual", overrides),

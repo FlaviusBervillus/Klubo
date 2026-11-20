@@ -463,6 +463,7 @@ export interface Dictionary {
     boardRoleHint: string
     boardMemberBadge: string
     generateBoardInvoice: string
+    payerManagedFromPayersHint: string
     searchPlaceholder: string
     allStatuses: string
     colFirstName: string
@@ -652,6 +653,13 @@ export interface Dictionary {
     payerSaved: string
     payerDeleted: string
     payerCascadeDeleted: string
+    linkedAdherentsTitle: string
+    linkedAdherentsHint: string
+    selfIsAdherentLabel: string
+    selfPickPlaceholder: string
+    childrenLabel: string
+    noOtherAdherents: string
+    saveFirstForLinksHint: string
     noPayers: string
     cascadeDeleteTitle: string
     cascadeDeleteDescription: string

@@ -28,7 +28,6 @@ import {
 import { Switch } from "@/components/ui/switch"
 import { useClientsStore } from "@/lib/clients-store"
 import { useDisciplinesStore } from "@/lib/disciplines-store"
-import { usePayersStore } from "@/lib/payers-store"
 import { useSeasonClients } from "@/lib/seasons-store"
 import { useTranslation } from "@/lib/i18n/context"
 import {
@@ -57,6 +56,7 @@ const emptyForm = {
   city: "",
   payerId: "none",
   boardRole: null as string | null,
+  payerRelationship: null as "self" | "child" | null,
 }
 
 function formFromClient(client: Client) {
@@ -74,6 +74,7 @@ function formFromClient(client: Client) {
     city: client.city,
     payerId: client.payerId ?? "none",
     boardRole: client.boardRole,
+    payerRelationship: client.payerRelationship,
   }
 }
 
@@ -82,7 +83,6 @@ export function AddClientDialog({ client }: { client?: Client } = {}) {
   const { clients, addClient, updateClient, available } = useClientsStore()
   const { setClientSeasonInfo, hasActiveSeason } = useSeasonClients()
   const { disciplines } = useDisciplinesStore()
-  const { payers } = usePayersStore()
   const [open, setOpen] = useState(false)
   const [form, setForm] = useState(client ? formFromClient(client) : emptyForm)
   const isEdit = !!client
@@ -318,28 +318,6 @@ export function AddClientDialog({ client }: { client?: Client } = {}) {
               />
             </Field>
 
-            <Field>
-              <FieldLabel>{t.clients.guardianFieldLabel}</FieldLabel>
-              <Select
-                value={form.payerId}
-                onValueChange={(v) => setForm((f) => ({ ...f, payerId: v ?? "none" }))}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder={t.clients.guardianFieldNone} />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectGroup>
-                    <SelectItem value="none">{t.clients.guardianFieldNone}</SelectItem>
-                    {payers.map((p) => (
-                      <SelectItem key={p.id} value={p.id}>
-                        {`${p.firstName} ${p.lastName}`.trim()}
-                      </SelectItem>
-                    ))}
-                  </SelectGroup>
-                </SelectContent>
-              </Select>
-            </Field>
-
             <Field orientation="horizontal">
               <FieldLabel htmlFor="client-board-member">{t.clients.boardMemberLabel}</FieldLabel>
               <Switch
@@ -368,6 +346,8 @@ export function AddClientDialog({ client }: { client?: Client } = {}) {
                 <p className="text-xs text-muted-foreground">{t.clients.boardRoleHint}</p>
               </Field>
             ) : null}
+
+            <p className="text-xs text-muted-foreground">{t.clients.payerManagedFromPayersHint}</p>
           </FieldGroup>
 
           <DialogFooter>

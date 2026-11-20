@@ -326,31 +326,50 @@ function getClubSettings() {
   }
 }
 
-/** Personne à facturer par défaut : l'adhérent explicitement associé à la transaction (champ
- * "Adhérent lié", voir transaction-detail-view.tsx) prime toujours — son nom doit apparaître sur la
- * facture même si un parent a réglé à sa place —, son adresse de facturation vient de son payeur
- * quand il en a un. Sans adhérent associé, on retombe sur le payeur retrouvé automatiquement
- * (Stripe uniquement pour l'instant). */
-function resolveClientForInvoice(tx) {
-  if (tx.linked_client_id) {
-    const client = db.getClientById(tx.linked_client_id)
-    if (client) {
-      const payer = client.payer_id ? db.getPayerById(client.payer_id) : null
-      return {
-        id: client.id,
-        first_name: client.first_name,
-        last_name: client.last_name,
-        email: payer?.email || client.email || "",
-        address: payer?.address || client.address || "",
-      }
-    }
+/** Qui facture-t-on pour cet adhérent : lui-même, sauf s'il est explicitement déclaré "enfant" d'un
+ * payeur (depuis la fiche payeur, payer_relationship) — alors la facture doit porter le nom du
+ * PARENT (c'est lui qui a réglé et qui a besoin du justificatif), le nom de l'enfant étant ajouté
+ * dans le descriptif par computeDescriptionSuffix ci-dessous. */
+function resolveClientIdentity(client) {
+  if (client.payer_id && client.payer_relationship !== "self") {
+    const payer = db.getPayerById(client.payer_id)
+    if (payer) return payer
+  }
+  return client
+}
+
+/** Personne à facturer par défaut pour une transaction : l'adhérent explicitement associé
+ * (forcedClientId, ex. bouton facture de l'onglet Adhérents, ou le champ "Adhérent lié" de la
+ * transaction) prime toujours. Sans adhérent associé, on retombe sur le payeur retrouvé
+ * automatiquement (Stripe uniquement pour l'instant). */
+function resolveClientForInvoice(tx, forcedClientId) {
+  const clientId = forcedClientId || tx.linked_client_id
+  if (clientId) {
+    const client = db.getClientById(clientId)
+    if (client) return resolveClientIdentity(client)
   }
   return db.findPayerForTransaction(tx)
 }
 
+/** Nom à ajouter dans le descriptif de la facture (ex. "Lucas FRANCOU") quand l'adhérent facturé
+ * est un enfant dont le parent est nommé sur la facture à sa place — indépendant de "overrides" :
+ * reste correct même une fois que le formulaire d'aperçu a pré-rempli le nom du parent. */
+function computeDescriptionSuffix(tx, forcedClientId) {
+  const clientId = forcedClientId || tx.linked_client_id
+  if (!clientId) return null
+  const client = db.getClientById(clientId)
+  if (!client || !client.payer_id || client.payer_relationship === "self") return null
+  return `${client.first_name} ${client.last_name}`.trim()
+}
+
+function applyDescriptionSuffix(tx, descriptionSuffix) {
+  if (!descriptionSuffix) return tx
+  return { ...tx, description: `${tx.description} — ${descriptionSuffix}` }
+}
+
 /** Payeur à facturer : celui retrouvé automatiquement, sauf si le trésorier a lié/saisi autre chose dans l'aperçu. */
-function resolveClient(tx, overrides) {
-  if (!overrides) return resolveClientForInvoice(tx)
+function resolveClient(tx, overrides, forcedClientId) {
+  if (!overrides) return resolveClientForInvoice(tx, forcedClientId)
   return {
     id: overrides.clientId || null,
     first_name: overrides.firstName || "",
@@ -360,10 +379,10 @@ function resolveClient(tx, overrides) {
   }
 }
 
-ipcMain.handle("receipts:prepare", (_e, transactionId) => {
+ipcMain.handle("receipts:prepare", (_e, transactionId, forcedClientId) => {
   const tx = db.getTransactionById(transactionId)
   if (!tx) return { ok: false, error: "Transaction introuvable" }
-  const client = resolveClientForInvoice(tx)
+  const client = resolveClientForInvoice(tx, forcedClientId)
   return {
     ok: true,
     tx: { id: tx.id, description: tx.description, amount: tx.amount, date: tx.date, method: tx.method },
@@ -417,22 +436,24 @@ ipcMain.handle("receipts:download-stripe-invoice", async (_e, transactionId) => 
   }
 })
 
-ipcMain.handle("receipts:render-preview", (_e, transactionId, overrides) => {
+ipcMain.handle("receipts:render-preview", (_e, transactionId, overrides, forcedClientId) => {
   try {
     const tx = db.getTransactionById(transactionId)
     if (!tx) return { ok: false, error: "Transaction introuvable" }
-    const html = renderInvoiceHtml(tx, getClubSettings(), resolveClient(tx, overrides))
+    const txForInvoice = applyDescriptionSuffix(tx, computeDescriptionSuffix(tx, forcedClientId))
+    const html = renderInvoiceHtml(txForInvoice, getClubSettings(), resolveClient(tx, overrides, forcedClientId))
     return { ok: true, html }
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : String(err) }
   }
 })
 
-ipcMain.handle("receipts:download", async (_e, transactionId, overrides) => {
+ipcMain.handle("receipts:download", async (_e, transactionId, overrides, forcedClientId) => {
   try {
     const tx = db.getTransactionById(transactionId)
     if (!tx) return { ok: false, error: "Transaction introuvable" }
-    let client = resolveClient(tx, overrides)
+    const txForInvoice = applyDescriptionSuffix(tx, computeDescriptionSuffix(tx, forcedClientId))
+    let client = resolveClient(tx, overrides, forcedClientId)
     if (overrides) {
       const payerId = overrides.clientId || db.findPayerForTransaction(tx)?.id || null
       if (payerId) {
@@ -445,7 +466,7 @@ ipcMain.handle("receipts:download", async (_e, transactionId, overrides) => {
         client = { ...client, id: payerId }
       }
     }
-    const pdfBuffer = await generateReceiptPdf(tx, getClubSettings(), client)
+    const pdfBuffer = await generateReceiptPdf(txForInvoice, getClubSettings(), client)
     const safeName = (`${client?.first_name || ""} ${client?.last_name || ""}`.trim() || tx.member || tx.id).replace(
       /[^a-zA-Z0-9]+/g,
       "_",
@@ -553,20 +574,26 @@ ipcMain.handle("receipts:download-bulk", async (_e, items) => {
     let count = 0
     const errors = []
     for (const item of items) {
+      const adherent = db.getClientById(item.clientId)
+      const adherentFirstName = adherent?.first_name || item.firstName || ""
+      const adherentLastName = adherent?.last_name || item.lastName || ""
       try {
         const tx = db.getTransactionById(item.transactionId)
-        if (!tx) {
-          errors.push(`${item.firstName} ${item.lastName}`.trim())
+        if (!tx || !adherent) {
+          errors.push(`${adherentFirstName} ${adherentLastName}`.trim())
           continue
         }
-        const autoClient = db.findPayerForTransaction(tx)
-        const client = { ...autoClient, first_name: item.firstName, last_name: item.lastName }
-        const pdfBuffer = await generateReceiptPdf(tx, settings, client)
-        const filePath = uniqueReceiptFilename(dir, item.firstName, item.lastName, usedNames)
+        // La facture est au nom du payeur si l'adhérent est un enfant (voir resolveClientIdentity),
+        // mais le fichier reste nommé d'après l'adhérent lui-même — plus simple à retrouver dans le
+        // dossier d'export, même quand plusieurs enfants partagent le même payeur.
+        const client = resolveClientIdentity(adherent)
+        const txForInvoice = applyDescriptionSuffix(tx, computeDescriptionSuffix(tx, item.clientId))
+        const pdfBuffer = await generateReceiptPdf(txForInvoice, settings, client)
+        const filePath = uniqueReceiptFilename(dir, adherentFirstName, adherentLastName, usedNames)
         fs.writeFileSync(filePath, pdfBuffer)
         count += 1
       } catch {
-        errors.push(`${item.firstName} ${item.lastName}`.trim())
+        errors.push(`${adherentFirstName} ${adherentLastName}`.trim())
       }
     }
     return { ok: true, count, dir, errors }

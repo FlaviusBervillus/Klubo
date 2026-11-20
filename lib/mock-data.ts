@@ -109,6 +109,10 @@ export interface Client {
   /** Non null = membre du bureau (trésorier, président...), exonéré de cotisation : le texte est le
    * rôle imprimé sur sa facture à 0 €, personnalisable (voir components/clients/add-client-dialog.tsx). */
   boardRole: string | null
+  /** Nature du lien avec payerId, choisie depuis la fiche payeur (components/payeurs/add-payer-dialog.tsx) :
+   * "self" = l'adhérent est le payeur lui-même, "child" = un enfant dont le payeur réglera la
+   * cotisation. Détermine qui est facturé (voir resolveClientForInvoice côté Electron). */
+  payerRelationship: "self" | "child" | null
 }
 
 /* ---------- Helpers ---------- */

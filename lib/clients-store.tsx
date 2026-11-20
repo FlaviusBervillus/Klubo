@@ -25,6 +25,7 @@ function rowToClient(row: DbClient): Client {
     city: row.city ?? "",
     payerId: row.payer_id ?? null,
     boardRole: row.board_role ?? null,
+    payerRelationship: (row.payer_relationship ?? null) as Client["payerRelationship"],
   }
 }
 
@@ -43,6 +44,7 @@ export interface NewClient {
   city: string
   payerId: string | null
   boardRole: string | null
+  payerRelationship: "self" | "child" | null
 }
 
 const ClientsContext = createContext<{

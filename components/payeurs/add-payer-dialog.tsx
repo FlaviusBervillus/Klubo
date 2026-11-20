@@ -17,7 +17,19 @@ import {
 } from "@/components/ui/dialog"
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
-import { formatFirstName, formatLastName } from "@/lib/mock-data"
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import { Separator } from "@/components/ui/separator"
+import { Switch } from "@/components/ui/switch"
+import { useClientsStore } from "@/lib/clients-store"
+import { clientFullName } from "@/lib/client-payments"
+import { formatFirstName, formatLastName, type Client } from "@/lib/mock-data"
 import { usePayersStore, type NewPayer, type Payer } from "@/lib/payers-store"
 import { useTranslation } from "@/lib/i18n/context"
 
@@ -46,13 +58,51 @@ function formFromPayer(p: Payer): NewPayer {
 export function AddPayerDialog({ payer }: { payer?: Payer } = {}) {
   const { t } = useTranslation()
   const { addPayer, updatePayer, available } = usePayersStore()
+  const { clients, updateClient } = useClientsStore()
   const [open, setOpen] = useState(false)
   const [form, setForm] = useState<NewPayer>(payer ? formFromPayer(payer) : emptyForm)
+  const [pendingSelfPick, setPendingSelfPick] = useState(false)
   const isEdit = !!payer
 
   useEffect(() => {
-    if (open) setForm(payer ? formFromPayer(payer) : emptyForm)
+    if (open) {
+      setForm(payer ? formFromPayer(payer) : emptyForm)
+      setPendingSelfPick(false)
+    }
   }, [open, payer])
+
+  // Qui ce payeur règle : lui-même (au plus un adhérent) et/ou ses enfants (plusieurs possibles) —
+  // choisi ici plutôt que deviné par comparaison de noms, voir payer_relationship.
+  const selfClient = payer
+    ? clients.find((c) => c.payerId === payer.id && c.payerRelationship === "self")
+    : undefined
+  const childClients = payer
+    ? clients.filter((c) => c.payerId === payer.id && c.payerRelationship === "child")
+    : []
+  // Candidats proposés dans les deux sélecteurs : tout adhérent qui n'est pas déjà "lui-même" pour
+  // CE payeur (un même adhérent ne peut pas être à la fois "lui-même" et un "enfant" du même payeur).
+  const otherClients = clients.filter((c) => c.id !== selfClient?.id)
+
+  function setSelf(clientId: string) {
+    if (!payer) return
+    updateClient(clientId, { payerId: payer.id, payerRelationship: "self" })
+    setPendingSelfPick(false)
+  }
+
+  function clearSelf() {
+    if (!selfClient) return
+    updateClient(selfClient.id, { payerId: null, payerRelationship: null })
+  }
+
+  function toggleChild(client: Client) {
+    if (!payer) return
+    const isChild = client.payerId === payer.id && client.payerRelationship === "child"
+    if (isChild) {
+      updateClient(client.id, { payerId: null, payerRelationship: null })
+    } else {
+      updateClient(client.id, { payerId: payer.id, payerRelationship: "child" })
+    }
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -172,6 +222,85 @@ export function AddPayerDialog({ payer }: { payer?: Payer } = {}) {
               </Field>
             </div>
           </FieldGroup>
+
+          <Separator />
+
+          {isEdit ? (
+            <FieldGroup className="py-4">
+              <p className="text-sm font-medium">{t.payers.linkedAdherentsTitle}</p>
+              <p className="-mt-2 text-xs text-muted-foreground">{t.payers.linkedAdherentsHint}</p>
+
+              <Field orientation="horizontal">
+                <FieldLabel htmlFor="payer-is-self">
+                  {t.payers.selfIsAdherentLabel}
+                  {selfClient ? (
+                    <span className="ml-1.5 font-normal text-muted-foreground">
+                      ({clientFullName(selfClient)})
+                    </span>
+                  ) : null}
+                </FieldLabel>
+                <Switch
+                  id="payer-is-self"
+                  checked={!!selfClient || pendingSelfPick}
+                  onCheckedChange={(checked) => {
+                    if (checked) {
+                      setPendingSelfPick(true)
+                    } else {
+                      clearSelf()
+                      setPendingSelfPick(false)
+                    }
+                  }}
+                />
+              </Field>
+              {(pendingSelfPick || selfClient) && !selfClient ? (
+                <Field>
+                  <Select value="" onValueChange={(v) => v && setSelf(v)}>
+                    <SelectTrigger>
+                      <SelectValue placeholder={t.payers.selfPickPlaceholder} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectGroup>
+                        {otherClients.map((c) => (
+                          <SelectItem key={c.id} value={c.id}>
+                            {clientFullName(c)}
+                          </SelectItem>
+                        ))}
+                      </SelectGroup>
+                    </SelectContent>
+                  </Select>
+                </Field>
+              ) : null}
+
+              <Field>
+                <FieldLabel>{t.payers.childrenLabel}</FieldLabel>
+                {otherClients.filter((c) => c.id !== selfClient?.id).length === 0 ? (
+                  <p className="text-xs text-muted-foreground">{t.payers.noOtherAdherents}</p>
+                ) : (
+                  <div className="flex flex-wrap gap-1.5">
+                    {otherClients
+                      .filter((c) => c.id !== selfClient?.id)
+                      .map((c) => {
+                        const isChild = childClients.some((child) => child.id === c.id)
+                        return (
+                          <Button
+                            key={c.id}
+                            type="button"
+                            variant={isChild ? "default" : "outline"}
+                            size="sm"
+                            className="h-7 px-2 text-xs"
+                            onClick={() => toggleChild(c)}
+                          >
+                            {clientFullName(c)}
+                          </Button>
+                        )
+                      })}
+                  </div>
+                )}
+              </Field>
+            </FieldGroup>
+          ) : (
+            <p className="py-4 text-xs text-muted-foreground">{t.payers.saveFirstForLinksHint}</p>
+          )}
 
           <DialogFooter>
             <DialogClose render={<Button variant="outline">{t.common.cancel}</Button>} />

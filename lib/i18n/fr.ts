@@ -499,6 +499,7 @@ export const fr: Dictionary = {
     boardRoleHint: "Imprimé sur sa facture à 0 €. Personnalisable — tape un nouveau rôle si besoin.",
     boardMemberBadge: "Bureau",
     generateBoardInvoice: "Générer la facture à 0 € (membre du bureau)",
+    payerManagedFromPayersHint: "Le payeur (parent) se choisit depuis l'onglet Payeurs, pas ici.",
     searchPlaceholder: "Rechercher (nom, email…)",
     allStatuses: "Tous les cours",
     colFirstName: "Prénom",
@@ -696,6 +697,14 @@ export const fr: Dictionary = {
     payerSaved: "Payeur enregistré",
     payerDeleted: "Payeur supprimé",
     payerCascadeDeleted: "Payeur et {count} adhérent(s) lié(s) supprimés",
+    linkedAdherentsTitle: "Adhérents rattachés",
+    linkedAdherentsHint:
+      "Précise qui ce payeur règle : lui-même (adulte qui paie sa propre cotisation) et/ou ses enfants. Détermine au nom de qui la facture est établie.",
+    selfIsAdherentLabel: "Ce payeur est lui-même adhérent",
+    selfPickPlaceholder: "Choisir l'adhérent correspondant",
+    childrenLabel: "Enfants dont il règle la cotisation",
+    noOtherAdherents: "Aucun autre adhérent disponible.",
+    saveFirstForLinksHint: "Enregistrez d'abord ce payeur pour pouvoir lui rattacher des adhérents.",
     noPayers: "Aucun payeur enregistré.",
     cascadeDeleteTitle: "Supprimer ce payeur et ses adhérents liés ?",
     cascadeDeleteDescription:

@@ -48,10 +48,11 @@ interface VirtualReceipt {
 interface ReceiptPreviewDialogProps {
   transactionId: string | null
   onOpenChange: (open: boolean) => void
-  /** Impose le prénom/nom affiché (ex. depuis la fiche d'un adhérent) — le payeur retrouvé sert
-   * toujours à pré-remplir l'email/l'adresse, mais la facture doit nommer l'adhérent lui-même, pas
-   * forcément celui qui a réglé (ex. un parent qui paie pour son enfant). */
-  forcedName?: { firstName: string; lastName: string } | null
+  /** Impose l'adhérent à facturer (ex. depuis le bouton facture de l'onglet Adhérents) : le serveur
+   * détermine qui nommer sur la facture — l'adhérent lui-même, ou son payeur (parent) avec le nom de
+   * l'adhérent ajouté dans le descriptif, si l'adhérent est explicitement déclaré "enfant" de ce
+   * payeur — voir resolveClientForInvoice côté Electron. */
+  forcedClientId?: string | null
   /** Quand fourni (et transactionId null), génère une facture virtuelle à 0 € au lieu de documenter
    * un paiement existant — voir VirtualReceipt. */
   virtual?: VirtualReceipt | null
@@ -60,7 +61,7 @@ interface ReceiptPreviewDialogProps {
 export function ReceiptPreviewDialog({
   transactionId,
   onOpenChange,
-  forcedName,
+  forcedClientId,
   virtual,
 }: ReceiptPreviewDialogProps) {
   const { t } = useTranslation()
@@ -83,8 +84,8 @@ export function ReceiptPreviewDialog({
       setHasResolvedClient(true)
       setSelectedClientId("")
       setForm({
-        firstName: forcedName?.firstName ?? virtual.firstName,
-        lastName: forcedName?.lastName ?? virtual.lastName,
+        firstName: virtual.firstName,
+        lastName: virtual.lastName,
         email: virtual.email,
         address: virtual.address,
       })
@@ -109,14 +110,14 @@ export function ReceiptPreviewDialog({
         setLoading(false)
         return
       }
-      const result = await electronApi.prepareReceipt(transactionId as string)
+      const result = await electronApi.prepareReceipt(transactionId as string, forcedClientId)
       if (cancelled) return
       if (result.ok) {
         setHasResolvedClient(!!result.client)
         setSelectedClientId(result.client?.id ?? "")
         setForm({
-          firstName: forcedName?.firstName ?? result.client?.first_name ?? "",
-          lastName: forcedName?.lastName ?? result.client?.last_name ?? "",
+          firstName: result.client?.first_name ?? "",
+          lastName: result.client?.last_name ?? "",
           email: result.client?.email ?? "",
           address: result.client?.address ?? "",
         })
@@ -131,7 +132,7 @@ export function ReceiptPreviewDialog({
       cancelled = true
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [transactionId, virtual])
+  }, [transactionId, virtual, forcedClientId])
 
   useEffect(() => {
     if (loading || isStripeInvoice) return
@@ -146,14 +147,14 @@ export function ReceiptPreviewDialog({
         return
       }
       const overrides: ReceiptOverrides = { payerId: selectedClientId || null, ...form }
-      const result = await electronApi.renderReceiptPreview(transactionId as string, overrides)
+      const result = await electronApi.renderReceiptPreview(transactionId as string, overrides, forcedClientId)
       if (!cancelled && result.ok) setHtml(result.html)
     }
     refreshPreview()
     return () => {
       cancelled = true
     }
-  }, [transactionId, virtual, loading, isStripeInvoice, form, selectedClientId])
+  }, [transactionId, virtual, loading, isStripeInvoice, form, selectedClientId, forcedClientId])
 
   function selectClient(id: string) {
     setSelectedClientId(id)
@@ -191,7 +192,7 @@ export function ReceiptPreviewDialog({
       return
     }
     const overrides: ReceiptOverrides = { payerId: selectedClientId || null, ...form }
-    const result = await electronApi.downloadReceipt(transactionId as string, overrides)
+    const result = await electronApi.downloadReceipt(transactionId as string, overrides, forcedClientId)
     setBusy(false)
     if (result.ok) {
       toast.success(t.transactionDetail.downloadReceipt, { description: result.path })

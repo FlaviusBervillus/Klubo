@@ -83,18 +83,15 @@ export function ClientsTable() {
   const [deleteBusy, setDeleteBusy] = useState(false)
   const [invoicePickerTarget, setInvoicePickerTarget] = useState<{
     name: string
-    firstName: string
-    lastName: string
+    clientId: string
     matches: ReturnType<typeof findClientPayments>
   } | null>(null)
   const [previewTxId, setPreviewTxId] = useState<string | null>(null)
   const [bulkBusy, setBulkBusy] = useState(false)
-  // La facture générée depuis la fiche d'un adhérent doit porter SON nom, même si le paiement
-  // retrouvé est au nom du payeur (ex. un parent qui règle par Stripe pour son enfant) : le payeur
-  // sert à retrouver la transaction, pas à décider à qui la facture est adressée.
-  const [forcedInvoiceName, setForcedInvoiceName] = useState<{ firstName: string; lastName: string } | null>(
-    null,
-  )
+  // Le payeur sert à retrouver la transaction, mais c'est toujours l'adhérent choisi ici qui décide
+  // à qui la facture est adressée (lui-même, ou son payeur + son nom en description s'il est déclaré
+  // "enfant" — voir resolveClientForInvoice côté Electron).
+  const [forcedClientId, setForcedClientId] = useState<string | null>(null)
   // Membre du bureau : pas de paiement à retrouver, on génère directement une facture à 0 € portant
   // son rôle en description (voir ReceiptPreviewDialog.virtual).
   const [virtualInvoiceTarget, setVirtualInvoiceTarget] = useState<{
@@ -168,22 +165,17 @@ export function ClientsTable() {
    * retrouvée (correspondance par nom, directe ou via le payeur — ex. un parent qui règle par
    * Stripe pour son enfant, voir findClientPayments). Une seule correspondance : ouvre directement
    * l'aperçu. Plusieurs : l'utilisateur choisit laquelle facturer. */
-  function openInvoice(
-    clientName: string,
-    firstName: string,
-    lastName: string,
-    matches: ReturnType<typeof findClientPayments>,
-  ) {
+  function openInvoice(clientName: string, clientId: string, matches: ReturnType<typeof findClientPayments>) {
     if (matches.length === 0) {
       toast.error(t.clients.invoiceNoTransaction)
       return
     }
-    setForcedInvoiceName({ firstName, lastName })
+    setForcedClientId(clientId)
     if (matches.length === 1) {
       setPreviewTxId(matches[0].transaction.id)
       return
     }
-    setInvoicePickerTarget({ name: clientName, firstName, lastName, matches })
+    setInvoicePickerTarget({ name: clientName, clientId, matches })
   }
 
   /** Génère en un seul geste les factures de tous les adhérents acquittés affichés (selon les
@@ -191,7 +183,7 @@ export function ClientsTable() {
    * ne facture que les paiements retrouvés sans ambiguïté (une seule correspondance) — les cas
    * ambigus restent à traiter via le bouton facture de la ligne concernée. */
   async function handleBulkDownload() {
-    const items: { transactionId: string; firstName: string; lastName: string }[] = []
+    const items: { transactionId: string; clientId: string; firstName: string; lastName: string }[] = []
     let skipped = 0
     for (const c of filtered) {
       if (!c.paid) continue
@@ -200,6 +192,7 @@ export function ClientsTable() {
       if (matches.length === 1) {
         items.push({
           transactionId: matches[0].transaction.id,
+          clientId: c.id,
           firstName: formatFirstName(c.firstName),
           lastName: formatLastName(c.lastName),
         })
@@ -459,12 +452,7 @@ export function ClientsTable() {
                                 address: c.address,
                                 description: c.boardRole,
                               })
-                            : openInvoice(
-                                `${c.firstName} ${c.lastName}`.trim(),
-                                formatFirstName(c.firstName),
-                                formatLastName(c.lastName),
-                                matches,
-                              )
+                            : openInvoice(`${c.firstName} ${c.lastName}`.trim(), c.id, matches)
                         }
                       >
                         <ReceiptTextIcon />
@@ -555,12 +543,12 @@ export function ClientsTable() {
 
       <ReceiptPreviewDialog
         transactionId={previewTxId}
-        forcedName={forcedInvoiceName}
+        forcedClientId={forcedClientId}
         virtual={virtualInvoiceTarget}
         onOpenChange={(open) => {
           if (!open) {
             setPreviewTxId(null)
-            setForcedInvoiceName(null)
+            setForcedClientId(null)
             setVirtualInvoiceTarget(null)
           }
         }}

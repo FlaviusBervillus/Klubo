@@ -498,6 +498,7 @@ export const en: Dictionary = {
     boardRoleHint: "Printed on their 0 € invoice. Customizable — type a new role if needed.",
     boardMemberBadge: "Board",
     generateBoardInvoice: "Generate 0 € invoice (board member)",
+    payerManagedFromPayersHint: "The payer (parent) is chosen from the Payers tab, not here.",
     searchPlaceholder: "Search (name, email…)",
     allStatuses: "All classes",
     colFirstName: "First name",
@@ -692,6 +693,14 @@ export const en: Dictionary = {
     payerSaved: "Payer saved",
     payerDeleted: "Payer deleted",
     payerCascadeDeleted: "Payer and {count} linked member(s) deleted",
+    linkedAdherentsTitle: "Linked members",
+    linkedAdherentsHint:
+      "Specify who this payer pays for: themselves (an adult paying their own dues) and/or their children. Determines who the invoice is billed to.",
+    selfIsAdherentLabel: "This payer is themselves a member",
+    selfPickPlaceholder: "Choose the matching member",
+    childrenLabel: "Children whose dues they pay",
+    noOtherAdherents: "No other member available.",
+    saveFirstForLinksHint: "Save this payer first before linking members to them.",
     noPayers: "No payers recorded.",
     cascadeDeleteTitle: "Delete this payer and its linked members?",
     cascadeDeleteDescription:
