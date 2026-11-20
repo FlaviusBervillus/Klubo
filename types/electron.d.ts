@@ -16,6 +16,14 @@ export interface ReceiptOverrides {
   address: string
 }
 
+export interface VirtualReceiptOverrides {
+  firstName: string
+  lastName: string
+  email: string
+  address: string
+  description: string
+}
+
 export interface DbClient {
   id: string
   first_name: string
@@ -30,6 +38,7 @@ export interface DbClient {
   postal_code: string
   city: string
   payer_id: string | null
+  board_role: string | null
 }
 
 export interface DbPayer {
@@ -325,6 +334,18 @@ declare global {
       downloadReceipt: (
         transactionId: string,
         overrides?: ReceiptOverrides,
+      ) => Promise<{ ok: true; path: string } | { ok: false; error?: string; canceled?: boolean }>
+      downloadReceiptsBulk: (
+        items: { transactionId: string; firstName: string; lastName: string }[],
+      ) => Promise<
+        | { ok: true; count: number; dir: string; errors: string[] }
+        | { ok: false; error?: string; canceled?: boolean }
+      >
+      renderReceiptPreviewVirtual: (
+        overrides: VirtualReceiptOverrides,
+      ) => Promise<{ ok: true; html: string } | { ok: false; error?: string }>
+      downloadReceiptVirtual: (
+        overrides: VirtualReceiptOverrides,
       ) => Promise<{ ok: true; path: string } | { ok: false; error?: string; canceled?: boolean }>
       downloadStripeInvoice: (
         transactionId: string,

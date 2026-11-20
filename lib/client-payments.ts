@@ -44,7 +44,13 @@ export function findClientPayments(
 }
 
 /** Adhérents dont le payeur est ce payeur (ex. les enfants d'un même parent) — pour suggérer de
- * réattribuer une transaction payée par le parent au bon enfant. */
+ * réattribuer une transaction payée par le parent au bon enfant. Exclut l'adhérent qui porte le même
+ * nom que le payeur : certains adultes sont à la fois membres du club ET leur propre payeur (ils
+ * règlent leur propre cotisation) — ce n'est pas un "enfant" à qui réattribuer, la transaction est
+ * déjà correctement rattachée à cette personne. */
 export function findLinkedChildren(payer: Payer, allClients: Client[]) {
-  return allClients.filter((c) => c.payerId === payer.id)
+  const payerName = normalizeClientName(payerFullName(payer))
+  return allClients.filter(
+    (c) => c.payerId === payer.id && normalizeClientName(clientFullName(c)) !== payerName,
+  )
 }

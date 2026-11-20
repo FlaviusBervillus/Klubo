@@ -441,6 +441,118 @@ ipcMain.handle("receipts:download", async (_e, transactionId, overrides) => {
   }
 })
 
+/** Facture "virtuelle" : ne correspond à aucune transaction réelle, utilisée pour exonérer de
+ * cotisation les membres du bureau (facture à 0 € portant leur rôle en description, comme preuve
+ * administrative qu'ils ne doivent rien). */
+function virtualTxFromOverrides(overrides) {
+  return {
+    id: `virtual-${crypto.randomUUID()}`,
+    date: new Date().toISOString().slice(0, 10),
+    description: overrides?.description || "Membre du Bureau",
+    amount: 0,
+    method: "especes",
+    category: null,
+  }
+}
+
+function virtualClientFromOverrides(overrides) {
+  return {
+    first_name: overrides?.firstName || "",
+    last_name: overrides?.lastName || "",
+    email: overrides?.email || "",
+    address: overrides?.address || "",
+  }
+}
+
+ipcMain.handle("receipts:render-preview-virtual", (_e, overrides) => {
+  try {
+    const html = renderInvoiceHtml(
+      virtualTxFromOverrides(overrides),
+      getClubSettings(),
+      virtualClientFromOverrides(overrides),
+    )
+    return { ok: true, html }
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) }
+  }
+})
+
+ipcMain.handle("receipts:download-virtual", async (_e, overrides) => {
+  try {
+    const tx = virtualTxFromOverrides(overrides)
+    const client = virtualClientFromOverrides(overrides)
+    const pdfBuffer = await generateReceiptPdf(tx, getClubSettings(), client)
+    const safeName = (`${client.first_name} ${client.last_name}`.trim() || "Facture").replace(
+      /[^a-zA-Z0-9]+/g,
+      "_",
+    )
+    const { canceled, filePath } = await dialog.showSaveDialog(mainWindow, {
+      title: "Enregistrer le justificatif",
+      defaultPath: `Facture_${safeName}.pdf`,
+      filters: [{ name: "PDF", extensions: ["pdf"] }],
+    })
+    if (canceled || !filePath) return { ok: false, canceled: true }
+    fs.writeFileSync(filePath, pdfBuffer)
+    return { ok: true, path: filePath }
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) }
+  }
+})
+
+/** Nom de fichier sûr et unique dans le dossier choisi (ajoute un suffixe numérique en cas de doublon,
+ * ex. deux adhérents homonymes). */
+function uniqueReceiptFilename(dir, firstName, lastName, usedNames) {
+  const safeName = `${firstName} ${lastName}`.trim().replace(/[^a-zA-Z0-9]+/g, "_") || "Facture"
+  let candidate = `Facture_${safeName}.pdf`
+  let n = 2
+  while (usedNames.has(candidate)) {
+    candidate = `Facture_${safeName}_${n}.pdf`
+    n += 1
+  }
+  usedNames.add(candidate)
+  return path.join(dir, candidate)
+}
+
+/** Génère en une fois les factures de plusieurs transactions (ex. tous les adhérents acquittés de
+ * l'onglet Adhérents) dans un dossier choisi par le trésorier, au lieu de les télécharger une par une. */
+ipcMain.handle("receipts:download-bulk", async (_e, items) => {
+  try {
+    if (!Array.isArray(items) || items.length === 0) {
+      return { ok: false, error: "Aucune facture à générer" }
+    }
+    const { canceled, filePaths } = await dialog.showOpenDialog(mainWindow, {
+      title: "Choisir le dossier d'export des factures",
+      properties: ["openDirectory", "createDirectory"],
+    })
+    if (canceled || !filePaths?.[0]) return { ok: false, canceled: true }
+    const dir = filePaths[0]
+    const settings = getClubSettings()
+    const usedNames = new Set()
+    let count = 0
+    const errors = []
+    for (const item of items) {
+      try {
+        const tx = db.getTransactionById(item.transactionId)
+        if (!tx) {
+          errors.push(`${item.firstName} ${item.lastName}`.trim())
+          continue
+        }
+        const autoClient = db.findPayerForTransaction(tx)
+        const client = { ...autoClient, first_name: item.firstName, last_name: item.lastName }
+        const pdfBuffer = await generateReceiptPdf(tx, settings, client)
+        const filePath = uniqueReceiptFilename(dir, item.firstName, item.lastName, usedNames)
+        fs.writeFileSync(filePath, pdfBuffer)
+        count += 1
+      } catch {
+        errors.push(`${item.firstName} ${item.lastName}`.trim())
+      }
+    }
+    return { ok: true, count, dir, errors }
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) }
+  }
+})
+
 /**
  * Une fois la saison active terminée, on exige une sauvegarde Mega (donc un point de
  * restauration sûr) avant d'accepter d'y mélanger les paiements de la saison suivante.

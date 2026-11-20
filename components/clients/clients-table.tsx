@@ -1,7 +1,7 @@
 "use client"
 
 import { useMemo, useState } from "react"
-import { CircleAlertIcon, ReceiptTextIcon, SearchIcon, Trash2Icon } from "lucide-react"
+import { CircleAlertIcon, DownloadIcon, ReceiptTextIcon, SearchIcon, ShieldCheckIcon, Trash2Icon } from "lucide-react"
 import { toast } from "sonner"
 
 import { Badge } from "@/components/ui/badge"
@@ -88,12 +88,22 @@ export function ClientsTable() {
     matches: ReturnType<typeof findClientPayments>
   } | null>(null)
   const [previewTxId, setPreviewTxId] = useState<string | null>(null)
+  const [bulkBusy, setBulkBusy] = useState(false)
   // La facture générée depuis la fiche d'un adhérent doit porter SON nom, même si le paiement
   // retrouvé est au nom du payeur (ex. un parent qui règle par Stripe pour son enfant) : le payeur
   // sert à retrouver la transaction, pas à décider à qui la facture est adressée.
   const [forcedInvoiceName, setForcedInvoiceName] = useState<{ firstName: string; lastName: string } | null>(
     null,
   )
+  // Membre du bureau : pas de paiement à retrouver, on génère directement une facture à 0 € portant
+  // son rôle en description (voir ReceiptPreviewDialog.virtual).
+  const [virtualInvoiceTarget, setVirtualInvoiceTarget] = useState<{
+    firstName: string
+    lastName: string
+    email: string
+    address: string
+    description: string
+  } | null>(null)
 
   function statusStyle(course: CourseType) {
     if (course === "Non catégorisé") return UNCATEGORIZED_STYLE
@@ -176,6 +186,49 @@ export function ClientsTable() {
     setInvoicePickerTarget({ name: clientName, firstName, lastName, matches })
   }
 
+  /** Génère en un seul geste les factures de tous les adhérents acquittés affichés (selon les
+   * filtres en cours) au lieu de les télécharger un par un. Comme pour la facture individuelle, on
+   * ne facture que les paiements retrouvés sans ambiguïté (une seule correspondance) — les cas
+   * ambigus restent à traiter via le bouton facture de la ligne concernée. */
+  async function handleBulkDownload() {
+    const items: { transactionId: string; firstName: string; lastName: string }[] = []
+    let skipped = 0
+    for (const c of filtered) {
+      if (!c.paid) continue
+      const payer = c.payerId ? payersById.get(c.payerId) ?? null : null
+      const matches = findClientPayments(c, payer, seasonTransactions)
+      if (matches.length === 1) {
+        items.push({
+          transactionId: matches[0].transaction.id,
+          firstName: formatFirstName(c.firstName),
+          lastName: formatLastName(c.lastName),
+        })
+      } else if (matches.length > 1) {
+        skipped += 1
+      }
+    }
+    if (items.length === 0) {
+      toast.error(t.clients.bulkInvoiceNone)
+      return
+    }
+    setBulkBusy(true)
+    const result = await window.electronAPI?.downloadReceiptsBulk(items)
+    setBulkBusy(false)
+    if (!result) return
+    if (result.ok) {
+      const totalSkipped = skipped + (result.errors?.length ?? 0)
+      toast.success(
+        totalSkipped > 0
+          ? t.clients.bulkInvoiceSuccessWithSkipped
+              .replace("{count}", String(result.count))
+              .replace("{skipped}", String(totalSkipped))
+          : t.clients.bulkInvoiceSuccess.replace("{count}", String(result.count)),
+      )
+    } else if (!result.canceled) {
+      toast.error(result.error || t.clients.bulkInvoiceError)
+    }
+  }
+
   async function handleDeleteConfirm() {
     if (!deleteTarget) return
     setDeleteBusy(true)
@@ -240,6 +293,17 @@ export function ClientsTable() {
             </Button>
           ) : null}
         </div>
+
+        <Button
+          variant="outline"
+          size="sm"
+          className="lg:ml-auto"
+          disabled={bulkBusy}
+          onClick={handleBulkDownload}
+        >
+          <DownloadIcon data-icon="inline-start" />
+          {t.clients.bulkDownloadInvoices}
+        </Button>
       </div>
 
       <div className="overflow-hidden rounded-lg border">
@@ -264,7 +328,17 @@ export function ClientsTable() {
               return (
                 <TableRow key={c.id}>
                   <TableCell className="font-medium">{formatFirstName(c.firstName)}</TableCell>
-                  <TableCell className="font-medium">{formatLastName(c.lastName)}</TableCell>
+                  <TableCell className="font-medium">
+                    <div className="flex items-center gap-1.5">
+                      {formatLastName(c.lastName)}
+                      {c.boardRole ? (
+                        <Badge variant="outline" className="gap-1 font-normal text-muted-foreground">
+                          <ShieldCheckIcon className="size-3" />
+                          {c.boardRole}
+                        </Badge>
+                      ) : null}
+                    </div>
+                  </TableCell>
                   <TableCell className="text-muted-foreground">
                     {c.email}
                   </TableCell>
@@ -375,14 +449,22 @@ export function ClientsTable() {
                       <Button
                         variant="ghost"
                         size="icon-sm"
-                        aria-label={t.clients.generateInvoice}
+                        aria-label={c.boardRole ? t.clients.generateBoardInvoice : t.clients.generateInvoice}
                         onClick={() =>
-                          openInvoice(
-                            `${c.firstName} ${c.lastName}`.trim(),
-                            formatFirstName(c.firstName),
-                            formatLastName(c.lastName),
-                            matches,
-                          )
+                          c.boardRole
+                            ? setVirtualInvoiceTarget({
+                                firstName: formatFirstName(c.firstName),
+                                lastName: formatLastName(c.lastName),
+                                email: c.email,
+                                address: c.address,
+                                description: c.boardRole,
+                              })
+                            : openInvoice(
+                                `${c.firstName} ${c.lastName}`.trim(),
+                                formatFirstName(c.firstName),
+                                formatLastName(c.lastName),
+                                matches,
+                              )
                         }
                       >
                         <ReceiptTextIcon />
@@ -474,10 +556,12 @@ export function ClientsTable() {
       <ReceiptPreviewDialog
         transactionId={previewTxId}
         forcedName={forcedInvoiceName}
+        virtual={virtualInvoiceTarget}
         onOpenChange={(open) => {
           if (!open) {
             setPreviewTxId(null)
             setForcedInvoiceName(null)
+            setVirtualInvoiceTarget(null)
           }
         }}
       />

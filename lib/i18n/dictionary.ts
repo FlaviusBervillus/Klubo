@@ -451,6 +451,16 @@ export interface Dictionary {
     invoiceNoTransaction: string
     invoicePickerTitle: string
     invoicePickerDescription: string
+    bulkDownloadInvoices: string
+    bulkInvoiceNone: string
+    bulkInvoiceSuccess: string
+    bulkInvoiceSuccessWithSkipped: string
+    bulkInvoiceError: string
+    boardMemberLabel: string
+    boardRoleLabel: string
+    boardRoleHint: string
+    boardMemberBadge: string
+    generateBoardInvoice: string
     searchPlaceholder: string
     allStatuses: string
     colFirstName: string

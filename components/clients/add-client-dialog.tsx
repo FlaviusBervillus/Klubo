@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { PencilIcon, PlusIcon } from "lucide-react"
 import { toast } from "sonner"
 
@@ -41,6 +41,8 @@ import {
   type PaymentMethod,
 } from "@/lib/mock-data"
 
+const DEFAULT_BOARD_ROLE = "Membre du Bureau"
+
 const emptyForm = {
   firstName: "",
   lastName: "",
@@ -54,6 +56,7 @@ const emptyForm = {
   postalCode: "",
   city: "",
   payerId: "none",
+  boardRole: null as string | null,
 }
 
 function formFromClient(client: Client) {
@@ -70,18 +73,30 @@ function formFromClient(client: Client) {
     postalCode: client.postalCode,
     city: client.city,
     payerId: client.payerId ?? "none",
+    boardRole: client.boardRole,
   }
 }
 
 export function AddClientDialog({ client }: { client?: Client } = {}) {
   const { t } = useTranslation()
-  const { addClient, updateClient, available } = useClientsStore()
+  const { clients, addClient, updateClient, available } = useClientsStore()
   const { setClientSeasonInfo, hasActiveSeason } = useSeasonClients()
   const { disciplines } = useDisciplinesStore()
   const { payers } = usePayersStore()
   const [open, setOpen] = useState(false)
   const [form, setForm] = useState(client ? formFromClient(client) : emptyForm)
   const isEdit = !!client
+
+  // Rôles déjà utilisés par d'autres membres du bureau, suggérés (sans jamais forcer) via la
+  // datalist — pour retrouver facilement "Trésorier"/"Président" sans ressaisir, tout en gardant le
+  // champ libre pour en inventer un nouveau.
+  const boardRoleSuggestions = useMemo(() => {
+    const roles = new Set<string>([DEFAULT_BOARD_ROLE])
+    for (const c of clients) {
+      if (c.boardRole) roles.add(c.boardRole)
+    }
+    return Array.from(roles)
+  }, [clients])
 
   useEffect(() => {
     if (open) {
@@ -324,6 +339,35 @@ export function AddClientDialog({ client }: { client?: Client } = {}) {
                 </SelectContent>
               </Select>
             </Field>
+
+            <Field orientation="horizontal">
+              <FieldLabel htmlFor="client-board-member">{t.clients.boardMemberLabel}</FieldLabel>
+              <Switch
+                id="client-board-member"
+                checked={form.boardRole !== null}
+                onCheckedChange={(checked) =>
+                  setForm((f) => ({ ...f, boardRole: checked ? DEFAULT_BOARD_ROLE : null }))
+                }
+              />
+            </Field>
+            {form.boardRole !== null ? (
+              <Field>
+                <FieldLabel htmlFor="client-board-role">{t.clients.boardRoleLabel}</FieldLabel>
+                <Input
+                  id="client-board-role"
+                  list="board-role-suggestions"
+                  value={form.boardRole}
+                  onChange={(e) => setForm((f) => ({ ...f, boardRole: e.target.value }))}
+                  placeholder={DEFAULT_BOARD_ROLE}
+                />
+                <datalist id="board-role-suggestions">
+                  {boardRoleSuggestions.map((role) => (
+                    <option key={role} value={role} />
+                  ))}
+                </datalist>
+                <p className="text-xs text-muted-foreground">{t.clients.boardRoleHint}</p>
+              </Field>
+            ) : null}
           </FieldGroup>
 
           <DialogFooter>

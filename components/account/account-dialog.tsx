@@ -148,6 +148,7 @@ export function AccountDialog({ trigger }: { trigger?: React.ReactNode }) {
           <DialogTitle>{t.account.title}</DialogTitle>
         </DialogHeader>
 
+        <div className="flex max-h-[70vh] flex-col gap-4 overflow-y-auto pr-1">
         <form onSubmit={handleProfileSubmit}>
           <FieldGroup>
             <p className="text-sm font-medium">{t.account.profileTitle}</p>
@@ -360,6 +361,7 @@ export function AccountDialog({ trigger }: { trigger?: React.ReactNode }) {
               </div>
             </form>
           ) : null}
+        </div>
         </div>
       </DialogContent>
     </Dialog>

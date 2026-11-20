@@ -101,6 +101,9 @@ export interface Client {
   /** Payeur associé (voir lib/payers-store.tsx) : la personne qui règle ses cotisations, pas
    * forcément lui-même — peut être null tant que personne n'a encore été désigné. */
   payerId: string | null
+  /** Non null = membre du bureau (trésorier, président...), exonéré de cotisation : le texte est le
+   * rôle imprimé sur sa facture à 0 €, personnalisable (voir components/clients/add-client-dialog.tsx). */
+  boardRole: string | null
 }
 
 /* ---------- Helpers ---------- */

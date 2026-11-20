@@ -24,6 +24,7 @@ function rowToClient(row: DbClient): Client {
     postalCode: row.postal_code ?? "",
     city: row.city ?? "",
     payerId: row.payer_id ?? null,
+    boardRole: row.board_role ?? null,
   }
 }
 
@@ -41,6 +42,7 @@ export interface NewClient {
   postalCode: string
   city: string
   payerId: string | null
+  boardRole: string | null
 }
 
 const ClientsContext = createContext<{

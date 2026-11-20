@@ -219,6 +219,9 @@ function migrate(db) {
   // contenait des données réelles, au cas où une ancienne sauvegarde/export y ferait encore référence.
   ensureColumn(db, "clients", "guardian_id", "guardian_id TEXT")
   ensureColumn(db, "clients", "payer_id", "payer_id TEXT")
+  // Membre du bureau (trésorier, président...) : non null = exonéré de cotisation, le texte sert de
+  // libellé de rôle imprimé sur la facture à 0 € générée pour lui (voir receipts:*-virtual).
+  ensureColumn(db, "clients", "board_role", "board_role TEXT")
   // Facture réellement générée par Stripe (Stripe Invoicing) pour cette charge, quand elle existe :
   // on préfère toujours la vraie facture Stripe à celle que l'on génère nous-mêmes.
   ensureColumn(db, "transactions", "stripe_invoice_pdf_url", "stripe_invoice_pdf_url TEXT")
@@ -430,8 +433,8 @@ function getClients() {
 function createClient(client) {
   getDb()
     .prepare(
-      `INSERT INTO clients (id, first_name, last_name, email, status, method, paid, address, phone, birth_date, postal_code, city, payer_id)
-       VALUES (@id, @firstName, @lastName, @email, @status, @method, @paid, @address, @phone, @birthDate, @postalCode, @city, @payerId)`,
+      `INSERT INTO clients (id, first_name, last_name, email, status, method, paid, address, phone, birth_date, postal_code, city, payer_id, board_role)
+       VALUES (@id, @firstName, @lastName, @email, @status, @method, @paid, @address, @phone, @birthDate, @postalCode, @city, @payerId, @boardRole)`,
     )
     .run({
       ...client,
@@ -442,6 +445,7 @@ function createClient(client) {
       postalCode: client.postalCode ?? "",
       city: client.city ?? "",
       payerId: client.payerId ?? null,
+      boardRole: client.boardRole ?? null,
     })
 }
 
@@ -728,6 +732,7 @@ function updateClient(id, patch) {
     ["postalCode", "postal_code"],
     ["city", "city"],
     ["payerId", "payer_id"],
+    ["boardRole", "board_role"],
   ]) {
     if (patch[key] !== undefined) {
       fields.push(`${column} = @${key}`)

@@ -34,6 +34,17 @@ const ZOOM_MAX = 2
 const PREVIEW_BASE_WIDTH = 760
 const PREVIEW_BASE_HEIGHT = 500
 
+/** Facture sans transaction réelle derrière (ex. exonération d'un membre du bureau) : la ligne de
+ * description et le montant (toujours 0 €) sont fixés d'avance, seuls prénom/nom/email/adresse
+ * restent modifiables dans l'aperçu. */
+interface VirtualReceipt {
+  firstName: string
+  lastName: string
+  email: string
+  address: string
+  description: string
+}
+
 interface ReceiptPreviewDialogProps {
   transactionId: string | null
   onOpenChange: (open: boolean) => void
@@ -41,9 +52,17 @@ interface ReceiptPreviewDialogProps {
    * toujours à pré-remplir l'email/l'adresse, mais la facture doit nommer l'adhérent lui-même, pas
    * forcément celui qui a réglé (ex. un parent qui paie pour son enfant). */
   forcedName?: { firstName: string; lastName: string } | null
+  /** Quand fourni (et transactionId null), génère une facture virtuelle à 0 € au lieu de documenter
+   * un paiement existant — voir VirtualReceipt. */
+  virtual?: VirtualReceipt | null
 }
 
-export function ReceiptPreviewDialog({ transactionId, onOpenChange, forcedName }: ReceiptPreviewDialogProps) {
+export function ReceiptPreviewDialog({
+  transactionId,
+  onOpenChange,
+  forcedName,
+  virtual,
+}: ReceiptPreviewDialogProps) {
   const { t } = useTranslation()
   const { payers } = usePayersStore()
   const clientItems = payers.map((p) => ({ value: p.id, label: `${p.firstName} ${p.lastName}`.trim() }))
@@ -56,10 +75,23 @@ export function ReceiptPreviewDialog({ transactionId, onOpenChange, forcedName }
   const [zoom, setZoom] = useState(1)
   const [busy, setBusy] = useState(false)
 
-  const open = !!transactionId
+  const open = !!transactionId || !!virtual
   const isStripeInvoice = !!stripeInvoicePdfUrl
 
   useEffect(() => {
+    if (virtual) {
+      setHasResolvedClient(true)
+      setSelectedClientId("")
+      setForm({
+        firstName: forcedName?.firstName ?? virtual.firstName,
+        lastName: forcedName?.lastName ?? virtual.lastName,
+        email: virtual.email,
+        address: virtual.address,
+      })
+      setStripeInvoicePdfUrl(null)
+      setZoom(1)
+      return
+    }
     if (!transactionId) {
       setForm(emptyForm)
       setSelectedClientId("")
@@ -99,14 +131,20 @@ export function ReceiptPreviewDialog({ transactionId, onOpenChange, forcedName }
       cancelled = true
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [transactionId])
+  }, [transactionId, virtual])
 
   useEffect(() => {
-    if (!transactionId || loading || isStripeInvoice) return
+    if (loading || isStripeInvoice) return
+    if (!transactionId && !virtual) return
     let cancelled = false
     async function refreshPreview() {
       const electronApi = window.electronAPI
       if (!electronApi) return
+      if (virtual) {
+        const result = await electronApi.renderReceiptPreviewVirtual({ ...form, description: virtual.description })
+        if (!cancelled && result.ok) setHtml(result.html)
+        return
+      }
       const overrides: ReceiptOverrides = { payerId: selectedClientId || null, ...form }
       const result = await electronApi.renderReceiptPreview(transactionId as string, overrides)
       if (!cancelled && result.ok) setHtml(result.html)
@@ -115,7 +153,7 @@ export function ReceiptPreviewDialog({ transactionId, onOpenChange, forcedName }
     return () => {
       cancelled = true
     }
-  }, [transactionId, loading, isStripeInvoice, form, selectedClientId])
+  }, [transactionId, virtual, loading, isStripeInvoice, form, selectedClientId])
 
   function selectClient(id: string) {
     setSelectedClientId(id)
@@ -126,12 +164,23 @@ export function ReceiptPreviewDialog({ transactionId, onOpenChange, forcedName }
   }
 
   async function handleDownload() {
-    if (!transactionId) return
+    if (!transactionId && !virtual) return
     const electronApi = window.electronAPI
     if (!electronApi) return
     setBusy(true)
+    if (virtual) {
+      const result = await electronApi.downloadReceiptVirtual({ ...form, description: virtual.description })
+      setBusy(false)
+      if (result.ok) {
+        toast.success(t.transactionDetail.downloadReceipt, { description: result.path })
+        onOpenChange(false)
+      } else if (!result.canceled) {
+        toast.error(result.error || t.transactionDetail.downloadReceipt)
+      }
+      return
+    }
     if (isStripeInvoice) {
-      const result = await electronApi.downloadStripeInvoice(transactionId)
+      const result = await electronApi.downloadStripeInvoice(transactionId as string)
       setBusy(false)
       if (result.ok) {
         toast.success(t.transactionDetail.downloadReceipt, { description: result.path })
@@ -142,7 +191,7 @@ export function ReceiptPreviewDialog({ transactionId, onOpenChange, forcedName }
       return
     }
     const overrides: ReceiptOverrides = { payerId: selectedClientId || null, ...form }
-    const result = await electronApi.downloadReceipt(transactionId, overrides)
+    const result = await electronApi.downloadReceipt(transactionId as string, overrides)
     setBusy(false)
     if (result.ok) {
       toast.success(t.transactionDetail.downloadReceipt, { description: result.path })

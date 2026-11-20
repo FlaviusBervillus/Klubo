@@ -93,6 +93,10 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ipcRenderer.invoke("receipts:render-preview", transactionId, overrides),
   downloadReceipt: (transactionId, overrides) =>
     ipcRenderer.invoke("receipts:download", transactionId, overrides),
+  downloadReceiptsBulk: (items) => ipcRenderer.invoke("receipts:download-bulk", items),
+  renderReceiptPreviewVirtual: (overrides) =>
+    ipcRenderer.invoke("receipts:render-preview-virtual", overrides),
+  downloadReceiptVirtual: (overrides) => ipcRenderer.invoke("receipts:download-virtual", overrides),
   downloadStripeInvoice: (transactionId) =>
     ipcRenderer.invoke("receipts:download-stripe-invoice", transactionId),
   renderQuotePreview: (quoteId) => ipcRenderer.invoke("quotes:render-preview", quoteId),
