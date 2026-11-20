@@ -81,6 +81,8 @@ export function TransactionDetailView() {
     loaded,
     categorize: categorizeInStore,
     updateMember: updateMemberInStore,
+    updateDescription: updateDescriptionInStore,
+    updateLinkedClient: updateLinkedClientInStore,
   } = useTransactionsStore()
   const { clients, updateClient } = useClientsStore()
   const { payers } = usePayersStore()
@@ -113,6 +115,10 @@ export function TransactionDetailView() {
   const txMember = tx.member
   const txAmount = tx.amount
   const txDescription = tx.description
+  // Une écriture Stripe/bancaire est remplie automatiquement par la synchro — seule une écriture
+  // saisie à la main (espèces/chèque, jamais produite par Stripe) doit pouvoir être corrigée après
+  // coup sans risquer de désynchroniser la source externe.
+  const isManualCashOrCheque = !tx.stripe && (tx.method === "especes" || tx.method === "cheque")
 
   function openReceiptPreview() {
     setPreviewOpen(true)
@@ -157,6 +163,11 @@ export function TransactionDetailView() {
     label: t.categories[c],
   }))
 
+  const clientSelectItems = [
+    { value: "none", label: t.transactionDetail.none },
+    ...clients.map((c) => ({ value: c.id, label: clientFullName(c) })),
+  ]
+
   // Cas fréquent : un parent règle la cotisation de son enfant, la transaction reste à son nom —
   // on le détecte (via le payeur, pas l'adhérent) pour proposer de réattribuer directement à
   // l'enfant inscrit.
@@ -165,8 +176,8 @@ export function TransactionDetailView() {
     : undefined
   const linkedChildren = matchedPayer ? findLinkedChildren(matchedPayer, clients) : []
 
-  function reassignToChild(childName: string) {
-    updateMemberInStore(txId, childName)
+  function reassignToChild(childId: string) {
+    updateLinkedClientInStore(txId, childId)
   }
 
   return (
@@ -190,9 +201,23 @@ export function TransactionDetailView() {
             </span>
             <StatusBadge status={tx.status} />
           </div>
-          <h2 className="text-2xl font-semibold tracking-tight">
-            {tx.description}
-          </h2>
+          {isManualCashOrCheque ? (
+            <Input
+              key={`${tx.id}-desc-${tx.description}`}
+              defaultValue={tx.description}
+              className="h-9 w-full max-w-md border-transparent bg-transparent px-0 text-2xl font-semibold tracking-tight hover:border-input hover:px-2 focus-visible:px-2"
+              onBlur={(e) => {
+                const value = e.target.value.trim()
+                if (value && value !== tx.description) {
+                  updateDescriptionInStore(txId, value)
+                }
+              }}
+            />
+          ) : (
+            <h2 className="text-2xl font-semibold tracking-tight">
+              {tx.description}
+            </h2>
+          )}
         </div>
         <Amount value={signed} className="text-3xl" />
       </div>
@@ -262,26 +287,58 @@ export function TransactionDetailView() {
             </MetaRow>
             <Separator />
             <MetaRow icon={UserIcon} label={t.transactionDetail.linkedMember}>
-              <Input
-                key={`${tx.id}-${tx.member ?? ""}`}
-                list="linked-member-suggestions"
-                defaultValue={tx.member ?? ""}
-                placeholder={t.transactionDetail.none}
-                className="h-7 w-44 border-transparent bg-transparent px-2 text-right text-sm font-medium hover:border-input"
-                onBlur={(e) => {
-                  const value = e.target.value.trim()
-                  if (value !== (tx.member ?? "")) {
-                    updateMemberInStore(txId, value || null)
-                  }
-                }}
-              />
-              <datalist id="linked-member-suggestions">
-                {clients.map((c) => (
-                  <option key={c.id} value={`${c.firstName} ${c.lastName}`.trim()} />
-                ))}
-              </datalist>
+              {isManualCashOrCheque ? (
+                <>
+                  <Input
+                    key={`${tx.id}-${tx.member ?? ""}`}
+                    list="linked-payer-suggestions"
+                    defaultValue={tx.member ?? ""}
+                    placeholder={t.transactionDetail.none}
+                    className="h-7 w-44 border-transparent bg-transparent px-2 text-right text-sm font-medium hover:border-input"
+                    onBlur={(e) => {
+                      const value = e.target.value.trim()
+                      if (value !== (tx.member ?? "")) {
+                        updateMemberInStore(txId, value || null)
+                      }
+                    }}
+                  />
+                  <datalist id="linked-payer-suggestions">
+                    {clients.map((c) => (
+                      <option key={c.id} value={`${c.firstName} ${c.lastName}`.trim()} />
+                    ))}
+                    {payers.map((p) => (
+                      <option key={p.id} value={`${p.firstName} ${p.lastName}`.trim()} />
+                    ))}
+                  </datalist>
+                </>
+              ) : (
+                tx.member || t.transactionDetail.none
+              )}
             </MetaRow>
-            {linkedChildren.length > 0 ? (
+            <Separator />
+            <MetaRow icon={UserIcon} label={t.transactionDetail.linkedAdherentLabel}>
+              <Select
+                items={clientSelectItems}
+                value={tx.linkedClientId ?? "none"}
+                onValueChange={(v) => updateLinkedClientInStore(txId, v && v !== "none" ? v : null)}
+              >
+                <SelectTrigger size="sm" className="h-7 border-transparent bg-transparent pr-1.5 pl-2 font-medium hover:border-input">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    <SelectItem value="none">{t.transactionDetail.none}</SelectItem>
+                    {clients.map((c) => (
+                      <SelectItem key={c.id} value={c.id}>
+                        {clientFullName(c)}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+            </MetaRow>
+            <p className="px-1 pb-1 text-xs text-muted-foreground">{t.transactionDetail.linkedAdherentHint}</p>
+            {linkedChildren.length > 0 && !tx.linkedClientId ? (
               <div className="flex flex-wrap items-center gap-1.5 px-1 pt-2 pb-1">
                 <span className="text-xs text-muted-foreground">
                   {t.transactionDetail.guardianHint}
@@ -293,7 +350,7 @@ export function TransactionDetailView() {
                     variant="outline"
                     size="sm"
                     className="h-6 px-2 text-xs"
-                    onClick={() => reassignToChild(clientFullName(child))}
+                    onClick={() => reassignToChild(child.id)}
                   >
                     {clientFullName(child)}
                   </Button>

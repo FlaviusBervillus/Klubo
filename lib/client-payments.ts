@@ -25,7 +25,10 @@ export interface ClientPaymentMatch {
 
 /** Transactions dont l'adhérent lié correspond au nom de ce client, ou — s'il a un payeur — au nom
  * de ce payeur : cas très fréquent où un parent règle la cotisation de son enfant, la transaction
- * reste au nom du parent mais sert quand même de preuve de paiement pour l'enfant. */
+ * reste au nom du parent mais sert quand même de preuve de paiement pour l'enfant. Une transaction
+ * explicitement associée à un adhérent (linkedClientId, voir transaction-detail-view.tsx) ne
+ * correspond qu'à LUI — sans ça, un payeur avec plusieurs enfants dans le club ferait remonter la
+ * même transaction comme preuve de paiement pour chacun d'eux. */
 export function findClientPayments(
   client: Client,
   payer: Payer | null,
@@ -35,7 +38,12 @@ export function findClientPayments(
   const payerName = payer ? normalizeClientName(payerFullName(payer)) : null
   const matches: ClientPaymentMatch[] = []
   for (const tx of transactions) {
-    if (tx.type !== "entree" || tx.status === "echec" || !tx.member) continue
+    if (tx.type !== "entree" || tx.status === "echec") continue
+    if (tx.linkedClientId) {
+      if (tx.linkedClientId === client.id) matches.push({ transaction: tx, via: "direct" })
+      continue
+    }
+    if (!tx.member) continue
     const txMember = normalizeClientName(tx.member)
     if (txMember === fullName) matches.push({ transaction: tx, via: "direct" })
     else if (payerName && txMember === payerName) matches.push({ transaction: tx, via: "payer" })

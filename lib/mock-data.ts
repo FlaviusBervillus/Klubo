@@ -52,6 +52,8 @@ export interface Transaction {
   id: string
   date: string
   description: string
+  /** Nom du PAYEUR tel qu'il apparaît sur le règlement (ex. le parent qui a réglé par carte) — pas
+   * forcément l'adhérent concerné, voir linkedClientId. */
   member: string | null
   method: PaymentMethod
   category: Category
@@ -61,6 +63,9 @@ export interface Transaction {
   stripe?: StripeDetails
   justificatif?: Justificatif
   note?: string
+  /** Adhérent explicitement associé à cette transaction (ex. l'enfant dont ce règlement couvre la
+   * cotisation) : prime sur "member" pour désigner à qui la facture doit être adressée. */
+  linkedClientId: string | null
 }
 
 /* ---------- Comptes & rôles ---------- */

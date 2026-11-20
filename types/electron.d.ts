@@ -180,6 +180,7 @@ export interface DbTransaction {
   stripe_net: number | null
   stripe_raw_json: string | null
   stripe_invoice_pdf_url: string | null
+  linked_client_id: string | null
 }
 
 export interface DbBankTransaction {

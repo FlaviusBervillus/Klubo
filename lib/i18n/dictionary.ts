@@ -178,6 +178,8 @@ export interface Dictionary {
     category: string
     method: string
     linkedMember: string
+    linkedAdherentLabel: string
+    linkedAdherentHint: string
     guardianHint: string
     none: string
     receipt: string

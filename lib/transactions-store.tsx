@@ -21,6 +21,7 @@ function rowToTransaction(row: DbTransaction): Transaction {
     date: row.date,
     description: row.description,
     member: row.member,
+    linkedClientId: row.linked_client_id ?? null,
     method: row.method as PaymentMethod,
     category: (row.category ?? "Non catégorisé") as Category,
     type: row.type as TransactionType,
@@ -63,6 +64,8 @@ const TransactionsContext = createContext<{
   getTransaction: (id: string) => Transaction | undefined
   categorize: (id: string, category: Category) => Promise<void>
   updateMember: (id: string, member: string | null) => Promise<void>
+  updateDescription: (id: string, description: string) => Promise<void>
+  updateLinkedClient: (id: string, clientId: string | null) => Promise<void>
   addTransaction: (input: NewTransaction) => Promise<void>
   refresh: () => Promise<void>
 } | null>(null)
@@ -105,6 +108,24 @@ export function TransactionsProvider({ children }: { children: React.ReactNode }
     )
   }
 
+  async function updateDescription(id: string, description: string) {
+    const electronApi = api()
+    if (!electronApi) return
+    await electronApi.db.updateTransaction(id, { description })
+    setTransactions((prev) =>
+      prev.map((tx) => (tx.id === id ? { ...tx, description } : tx)),
+    )
+  }
+
+  async function updateLinkedClient(id: string, clientId: string | null) {
+    const electronApi = api()
+    if (!electronApi) return
+    await electronApi.db.updateTransaction(id, { linkedClientId: clientId })
+    setTransactions((prev) =>
+      prev.map((tx) => (tx.id === id ? { ...tx, linkedClientId: clientId } : tx)),
+    )
+  }
+
   async function addTransaction(input: NewTransaction) {
     const electronApi = api()
     if (!electronApi) return
@@ -125,6 +146,8 @@ export function TransactionsProvider({ children }: { children: React.ReactNode }
         getTransaction,
         categorize,
         updateMember,
+        updateDescription,
+        updateLinkedClient,
         addTransaction,
         refresh,
       }}

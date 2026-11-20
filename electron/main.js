@@ -326,9 +326,31 @@ function getClubSettings() {
   }
 }
 
-/** Payeur à facturer : celui retrouvé automatiquement (Stripe), sauf si le trésorier a lié/saisi autre chose dans l'aperçu. */
+/** Personne à facturer par défaut : l'adhérent explicitement associé à la transaction (champ
+ * "Adhérent lié", voir transaction-detail-view.tsx) prime toujours — son nom doit apparaître sur la
+ * facture même si un parent a réglé à sa place —, son adresse de facturation vient de son payeur
+ * quand il en a un. Sans adhérent associé, on retombe sur le payeur retrouvé automatiquement
+ * (Stripe uniquement pour l'instant). */
+function resolveClientForInvoice(tx) {
+  if (tx.linked_client_id) {
+    const client = db.getClientById(tx.linked_client_id)
+    if (client) {
+      const payer = client.payer_id ? db.getPayerById(client.payer_id) : null
+      return {
+        id: client.id,
+        first_name: client.first_name,
+        last_name: client.last_name,
+        email: payer?.email || client.email || "",
+        address: payer?.address || client.address || "",
+      }
+    }
+  }
+  return db.findPayerForTransaction(tx)
+}
+
+/** Payeur à facturer : celui retrouvé automatiquement, sauf si le trésorier a lié/saisi autre chose dans l'aperçu. */
 function resolveClient(tx, overrides) {
-  if (!overrides) return db.findPayerForTransaction(tx)
+  if (!overrides) return resolveClientForInvoice(tx)
   return {
     id: overrides.clientId || null,
     first_name: overrides.firstName || "",
@@ -341,7 +363,7 @@ function resolveClient(tx, overrides) {
 ipcMain.handle("receipts:prepare", (_e, transactionId) => {
   const tx = db.getTransactionById(transactionId)
   if (!tx) return { ok: false, error: "Transaction introuvable" }
-  const client = db.findPayerForTransaction(tx)
+  const client = resolveClientForInvoice(tx)
   return {
     ok: true,
     tx: { id: tx.id, description: tx.description, amount: tx.amount, date: tx.date, method: tx.method },

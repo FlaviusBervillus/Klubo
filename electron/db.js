@@ -222,6 +222,10 @@ function migrate(db) {
   // Membre du bureau (trésorier, président...) : non null = exonéré de cotisation, le texte sert de
   // libellé de rôle imprimé sur la facture à 0 € générée pour lui (voir receipts:*-virtual).
   ensureColumn(db, "clients", "board_role", "board_role TEXT")
+  // Adhérent explicitement associé à cette transaction (distinct de "member", qui reste le nom du
+  // PAYEUR tel qu'il apparaît sur le règlement) : utile quand un parent et son enfant sont tous les
+  // deux adhérents mais qu'un seul paie — la facture doit nommer l'enfant, pas le parent qui a réglé.
+  ensureColumn(db, "transactions", "linked_client_id", "linked_client_id TEXT")
   // Facture réellement générée par Stripe (Stripe Invoicing) pour cette charge, quand elle existe :
   // on préfère toujours la vraie facture Stripe à celle que l'on génère nous-mêmes.
   ensureColumn(db, "transactions", "stripe_invoice_pdf_url", "stripe_invoice_pdf_url TEXT")
@@ -864,6 +868,7 @@ function updateTransaction(id, patch) {
     ["amount", "amount"],
     ["method", "method"],
     ["member", "member"],
+    ["linkedClientId", "linked_client_id"],
     ["stripeNet", "stripe_net"],
     ["stripeInvoicePdfUrl", "stripe_invoice_pdf_url"],
   ]) {
