@@ -104,6 +104,22 @@ export interface Client {
 }
 
 /* ---------- Helpers ---------- */
+
+/** Convention administrative française : NOM en majuscules, Prénom avec une majuscule par
+ * segment (espace, tiret, apostrophe) — "jean-pierre o'brien" -> "Jean-Pierre O'Brien". */
+export function formatLastName(value: string): string {
+  return value.trim().toUpperCase()
+}
+
+export function formatFirstName(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .split(/([\s'-]+)/)
+    .map((part) => (part ? part.charAt(0).toUpperCase() + part.slice(1) : part))
+    .join("")
+}
+
 export function formatEuro(value: number, opts?: { signed?: boolean }) {
   const formatted = new Intl.NumberFormat("fr-FR", {
     style: "currency",

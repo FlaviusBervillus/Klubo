@@ -225,6 +225,8 @@ function migrate(db) {
   // Ajouté après la sortie initiale du devis : les devis déjà créés n'ont pas cette colonne tant
   // que ce IF NOT EXISTS ne la crée pas explicitement.
   ensureColumn(db, "quotes", "validity_text", "validity_text TEXT NOT NULL DEFAULT ''")
+  // Double authentification (TOTP) pour la récupération de mot de passe — voir lib/crypto/totp.ts.
+  ensureColumn(db, "users", "totp_secret", "totp_secret TEXT")
 
   migrateSeasonMembershipBackfill(db)
   migrateDisciplinesBackfill(db)
@@ -403,6 +405,7 @@ function updateUser(id, patch) {
     ["passwordHash", "password_hash"],
     ["securityQuestion", "security_question"],
     ["securityAnswerHash", "security_answer_hash"],
+    ["totpSecret", "totp_secret"],
   ]) {
     if (patch[key] !== undefined) {
       fields.push(`${column} = @${key}`)

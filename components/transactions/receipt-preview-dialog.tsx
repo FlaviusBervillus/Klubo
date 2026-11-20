@@ -37,9 +37,13 @@ const PREVIEW_BASE_HEIGHT = 500
 interface ReceiptPreviewDialogProps {
   transactionId: string | null
   onOpenChange: (open: boolean) => void
+  /** Impose le prénom/nom affiché (ex. depuis la fiche d'un adhérent) — le payeur retrouvé sert
+   * toujours à pré-remplir l'email/l'adresse, mais la facture doit nommer l'adhérent lui-même, pas
+   * forcément celui qui a réglé (ex. un parent qui paie pour son enfant). */
+  forcedName?: { firstName: string; lastName: string } | null
 }
 
-export function ReceiptPreviewDialog({ transactionId, onOpenChange }: ReceiptPreviewDialogProps) {
+export function ReceiptPreviewDialog({ transactionId, onOpenChange, forcedName }: ReceiptPreviewDialogProps) {
   const { t } = useTranslation()
   const { payers } = usePayersStore()
   const clientItems = payers.map((p) => ({ value: p.id, label: `${p.firstName} ${p.lastName}`.trim() }))
@@ -79,8 +83,8 @@ export function ReceiptPreviewDialog({ transactionId, onOpenChange }: ReceiptPre
         setHasResolvedClient(!!result.client)
         setSelectedClientId(result.client?.id ?? "")
         setForm({
-          firstName: result.client?.first_name ?? "",
-          lastName: result.client?.last_name ?? "",
+          firstName: forcedName?.firstName ?? result.client?.first_name ?? "",
+          lastName: forcedName?.lastName ?? result.client?.last_name ?? "",
           email: result.client?.email ?? "",
           address: result.client?.address ?? "",
         })

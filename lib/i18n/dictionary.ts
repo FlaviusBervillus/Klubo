@@ -57,6 +57,9 @@ export interface Dictionary {
     forgotNoQuestion: string
     forgotAnswerLabel: string
     forgotWrongAnswer: string
+    forgotTotpStep: string
+    forgotWrongTotp: string
+    forgotCliHint: string
     forgotSuccess: string
     continueLabel: string
     desktopRequiredTitle: string
@@ -538,6 +541,18 @@ export interface Dictionary {
     securityAnswerLabel: string
     saveSecurityQuestion: string
     securityQuestionSaved: string
+    totpTitle: string
+    totpDescription: string
+    totpActiveBadge: string
+    totpEnable: string
+    totpDisable: string
+    totpSetupHint: string
+    totpSecretLabel: string
+    totpCodeLabel: string
+    totpConfirm: string
+    totpWrongCode: string
+    totpEnabled: string
+    totpDisabled: string
   }
   users: {
     title: string

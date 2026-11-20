@@ -13,6 +13,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
+import { Badge } from "@/components/ui/badge"
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
@@ -21,7 +22,16 @@ import { useTranslation } from "@/lib/i18n/context"
 
 export function AccountDialog({ trigger }: { trigger?: React.ReactNode }) {
   const { t } = useTranslation()
-  const { session, updateProfile, changePassword, setSecurityQuestion } = useAuth()
+  const {
+    session,
+    updateProfile,
+    changePassword,
+    setSecurityQuestion,
+    hasTotp,
+    setupTotp,
+    confirmTotp,
+    disableTotp,
+  } = useAuth()
   const [open, setOpen] = useState(false)
 
   const [name, setName] = useState(session?.name ?? "")
@@ -35,6 +45,11 @@ export function AccountDialog({ trigger }: { trigger?: React.ReactNode }) {
   const [securityQuestion, setSecurityQuestionValue] = useState("")
   const [securityAnswer, setSecurityAnswer] = useState("")
 
+  const [totpEnabled, setTotpEnabled] = useState(false)
+  const [totpSetup, setTotpSetup] = useState<{ secret: string; uri: string } | null>(null)
+  const [totpCode, setTotpCode] = useState("")
+  const [totpError, setTotpError] = useState("")
+
   useEffect(() => {
     if (open && session) {
       setName(session.name)
@@ -45,7 +60,12 @@ export function AccountDialog({ trigger }: { trigger?: React.ReactNode }) {
       setPasswordError("")
       setSecurityQuestionValue("")
       setSecurityAnswer("")
+      setTotpSetup(null)
+      setTotpCode("")
+      setTotpError("")
+      hasTotp().then(setTotpEnabled)
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, session])
 
   if (!session) return null
@@ -81,6 +101,32 @@ export function AccountDialog({ trigger }: { trigger?: React.ReactNode }) {
     e.preventDefault()
     await setSecurityQuestion(securityQuestion, securityAnswer)
     toast.success(t.account.securityQuestionSaved)
+  }
+
+  async function handleStartTotpSetup() {
+    const result = await setupTotp()
+    if (result) setTotpSetup(result)
+  }
+
+  async function handleConfirmTotp(e: React.FormEvent) {
+    e.preventDefault()
+    if (!totpSetup) return
+    const ok = await confirmTotp(totpSetup.secret, totpCode)
+    if (!ok) {
+      setTotpError(t.account.totpWrongCode)
+      return
+    }
+    setTotpEnabled(true)
+    setTotpSetup(null)
+    setTotpCode("")
+    setTotpError("")
+    toast.success(t.account.totpEnabled)
+  }
+
+  async function handleDisableTotp() {
+    await disableTotp()
+    setTotpEnabled(false)
+    toast.success(t.account.totpDisabled)
   }
 
   return (
@@ -235,6 +281,86 @@ export function AccountDialog({ trigger }: { trigger?: React.ReactNode }) {
             </Button>
           </FieldGroup>
         </form>
+
+        <Separator />
+
+        <div className="flex flex-col gap-3">
+          <div className="flex items-center justify-between gap-2">
+            <div>
+              <p className="text-sm font-medium">{t.account.totpTitle}</p>
+              <p className="text-xs text-muted-foreground">{t.account.totpDescription}</p>
+            </div>
+            {totpEnabled ? (
+              <Badge variant="outline" className="border-success/40 text-success">
+                {t.account.totpActiveBadge}
+              </Badge>
+            ) : null}
+          </div>
+
+          {totpEnabled && !totpSetup ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="w-fit text-destructive"
+              onClick={handleDisableTotp}
+            >
+              {t.account.totpDisable}
+            </Button>
+          ) : null}
+
+          {!totpEnabled && !totpSetup ? (
+            <Button type="button" size="sm" variant="outline" className="w-fit" onClick={handleStartTotpSetup}>
+              {t.account.totpEnable}
+            </Button>
+          ) : null}
+
+          {totpSetup ? (
+            <form onSubmit={handleConfirmTotp} className="flex flex-col gap-3">
+              <p className="text-xs text-muted-foreground">{t.account.totpSetupHint}</p>
+              <Field>
+                <FieldLabel>{t.account.totpSecretLabel}</FieldLabel>
+                <code className="block rounded-lg border bg-muted/50 px-2.5 py-2 text-xs break-all">
+                  {totpSetup.secret}
+                </code>
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="totp-confirm-code">{t.account.totpCodeLabel}</FieldLabel>
+                <Input
+                  id="totp-confirm-code"
+                  required
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  placeholder="000000"
+                  value={totpCode}
+                  onChange={(e) => {
+                    setTotpCode(e.target.value)
+                    setTotpError("")
+                  }}
+                />
+              </Field>
+              {totpError ? <p className="text-sm text-destructive">{totpError}</p> : null}
+              <div className="flex gap-2">
+                <Button type="submit" size="sm" className="w-fit">
+                  {t.account.totpConfirm}
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  className="w-fit"
+                  onClick={() => {
+                    setTotpSetup(null)
+                    setTotpCode("")
+                    setTotpError("")
+                  }}
+                >
+                  {t.common.cancel}
+                </Button>
+              </div>
+            </form>
+          ) : null}
+        </div>
       </DialogContent>
     </Dialog>
   )

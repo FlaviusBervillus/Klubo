@@ -3,7 +3,13 @@
 import { createContext, useContext, useEffect, useState } from "react"
 
 import { hashPassword, verifyPassword } from "@/lib/crypto/password"
+import { generateTotpSecret, generateTotpUri, verifyTotpCode } from "@/lib/crypto/totp"
 import type { Role } from "@/lib/mock-data"
+
+export type RecoveryMethod =
+  | { method: "totp" }
+  | { method: "question"; question: string }
+  | { method: "none" }
 
 export interface Session {
   id: string
@@ -29,12 +35,17 @@ const AuthContext = createContext<{
   updateProfile: (patch: { name: string; email: string }) => Promise<void>
   changePassword: (currentPassword: string, newPassword: string) => Promise<boolean>
   setSecurityQuestion: (question: string, answer: string) => Promise<void>
-  getSecurityQuestion: (email: string) => Promise<string | null>
+  getRecoveryMethod: (email: string) => Promise<RecoveryMethod>
   resetPasswordWithAnswer: (
     email: string,
     answer: string,
     newPassword: string,
   ) => Promise<boolean>
+  resetPasswordWithTotp: (email: string, code: string, newPassword: string) => Promise<boolean>
+  hasTotp: () => Promise<boolean>
+  setupTotp: () => Promise<{ secret: string; uri: string } | null>
+  confirmTotp: (secret: string, code: string) => Promise<boolean>
+  disableTotp: () => Promise<void>
 } | null>(null)
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -135,11 +146,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await electronApi.db.updateUser(session.id, { securityQuestion: question, securityAnswerHash })
   }
 
-  async function getSecurityQuestion(email: string) {
+  /** La 2FA (TOTP) prime sur la question de sécurité si les deux sont configurées — c'est le
+   * facteur le plus fiable (la question de sécurité reste disponible pour les comptes qui n'ont
+   * pas encore activé la 2FA). */
+  async function getRecoveryMethod(email: string): Promise<RecoveryMethod> {
     const electronApi = api()
-    if (!electronApi) return null
+    if (!electronApi) return { method: "none" }
     const user = await electronApi.db.findUserByEmail(email)
-    return user?.security_question ?? null
+    if (!user) return { method: "none" }
+    if (user.totp_secret) return { method: "totp" }
+    if (user.security_question) return { method: "question", question: user.security_question }
+    return { method: "none" }
   }
 
   async function resetPasswordWithAnswer(email: string, answer: string, newPassword: string) {
@@ -152,6 +169,49 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const passwordHash = await hashPassword(newPassword)
     await electronApi.db.updateUser(user.id, { passwordHash })
     return true
+  }
+
+  async function resetPasswordWithTotp(email: string, code: string, newPassword: string) {
+    const electronApi = api()
+    if (!electronApi) return false
+    const user = await electronApi.db.findUserByEmail(email)
+    if (!user || !user.totp_secret) return false
+    const ok = await verifyTotpCode(user.totp_secret, code)
+    if (!ok) return false
+    const passwordHash = await hashPassword(newPassword)
+    await electronApi.db.updateUser(user.id, { passwordHash })
+    return true
+  }
+
+  async function hasTotp() {
+    const electronApi = api()
+    if (!electronApi || !session) return false
+    const user = await electronApi.db.findUserByEmail(session.email)
+    return !!user?.totp_secret
+  }
+
+  /** Génère une nouvelle clé — pas encore enregistrée (voir confirmTotp) tant que l'utilisateur n'a
+   * pas prouvé qu'il l'a bien configurée dans son appli d'authentification. */
+  async function setupTotp() {
+    if (!session) return null
+    const secret = generateTotpSecret()
+    const uri = generateTotpUri(secret, session.email)
+    return { secret, uri }
+  }
+
+  async function confirmTotp(secret: string, code: string) {
+    const electronApi = api()
+    if (!electronApi || !session) return false
+    const ok = await verifyTotpCode(secret, code)
+    if (!ok) return false
+    await electronApi.db.updateUser(session.id, { totpSecret: secret })
+    return true
+  }
+
+  async function disableTotp() {
+    const electronApi = api()
+    if (!electronApi || !session) return
+    await electronApi.db.updateUser(session.id, { totpSecret: null })
   }
 
   return (
@@ -167,8 +227,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         updateProfile,
         changePassword,
         setSecurityQuestion,
-        getSecurityQuestion,
+        getRecoveryMethod,
         resetPasswordWithAnswer,
+        resetPasswordWithTotp,
+        hasTotp,
+        setupTotp,
+        confirmTotp,
+        disableTotp,
       }}
     >
       {children}

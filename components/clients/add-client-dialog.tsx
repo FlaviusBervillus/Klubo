@@ -33,6 +33,8 @@ import { useSeasonClients } from "@/lib/seasons-store"
 import { useTranslation } from "@/lib/i18n/context"
 import {
   ALL_PAYMENT_METHODS,
+  formatFirstName,
+  formatLastName,
   UNCATEGORIZED_COURSE,
   type Client,
   type CourseType,
@@ -93,8 +95,16 @@ export function AddClientDialog({ client }: { client?: Client } = {}) {
       toast.error(t.settings.electronOnlyFeature)
       return
     }
+    // Convention administrative : NOM en majuscules, Prénom avec une majuscule par segment — pour
+    // que les fiches, tableaux et factures affichent toujours la même chose, quelle que soit la
+    // façon dont le trésorier les a tapés.
+    const normalizedForm = {
+      ...form,
+      firstName: formatFirstName(form.firstName),
+      lastName: formatLastName(form.lastName),
+    }
     if (isEdit) {
-      const { status, paid, ...identity } = form
+      const { status, paid, ...identity } = normalizedForm
       await updateClient(client.id, {
         ...identity,
         payerId: identity.payerId === "none" ? null : identity.payerId,
@@ -111,13 +121,13 @@ export function AddClientDialog({ client }: { client?: Client } = {}) {
       const newId = crypto.randomUUID()
       await addClient({
         id: newId,
-        ...form,
-        payerId: form.payerId === "none" ? null : form.payerId,
+        ...normalizedForm,
+        payerId: normalizedForm.payerId === "none" ? null : normalizedForm.payerId,
       })
       // Un nouveau client rejoint aussitôt l'effectif de la saison active, sinon il n'apparaîtrait
       // nulle part (les saisons démarrent volontairement avec un effectif vide).
       if (hasActiveSeason) {
-        await setClientSeasonInfo(newId, { status: form.status, paid: form.paid })
+        await setClientSeasonInfo(newId, { status: normalizedForm.status, paid: normalizedForm.paid })
       }
       setForm(emptyForm)
     }

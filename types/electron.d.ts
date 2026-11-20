@@ -202,7 +202,12 @@ declare global {
       db: {
         getUsers: () => Promise<DbUser[]>
         countUsers: () => Promise<number>
-        findUserByEmail: (email: string) => Promise<(DbUser & { password_hash: string; security_answer_hash: string | null }) | null>
+        findUserByEmail: (
+          email: string,
+        ) => Promise<
+          | (DbUser & { password_hash: string; security_answer_hash: string | null; totp_secret: string | null })
+          | null
+        >
         createUser: (user: Record<string, unknown>) => Promise<void>
         updateUser: (id: string, patch: Record<string, unknown>) => Promise<void>
         deleteUser: (id: string) => Promise<void>

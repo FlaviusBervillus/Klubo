@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/dialog"
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
+import { formatFirstName, formatLastName } from "@/lib/mock-data"
 import { usePayersStore, type NewPayer, type Payer } from "@/lib/payers-store"
 import { useTranslation } from "@/lib/i18n/context"
 
@@ -59,10 +60,16 @@ export function AddPayerDialog({ payer }: { payer?: Payer } = {}) {
       toast.error(t.settings.electronOnlyFeature)
       return
     }
+    // Convention administrative : NOM en majuscules, Prénom avec une majuscule par segment.
+    const normalizedForm = {
+      ...form,
+      firstName: formatFirstName(form.firstName),
+      lastName: formatLastName(form.lastName),
+    }
     if (isEdit) {
-      await updatePayer(payer.id, form)
+      await updatePayer(payer.id, normalizedForm)
     } else {
-      const result = await addPayer(form)
+      const result = await addPayer(normalizedForm)
       if (!result.ok) {
         toast.error(result.error || t.payers.importErrorTitle)
         return

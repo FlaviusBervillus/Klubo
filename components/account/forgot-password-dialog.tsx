@@ -16,16 +16,17 @@ import { Input } from "@/components/ui/input"
 import { useAuth } from "@/lib/auth-context"
 import { useTranslation } from "@/lib/i18n/context"
 
-type Step = "email" | "answer" | "none" | "done"
+type Step = "email" | "question" | "totp" | "none" | "done"
 
 export function ForgotPasswordDialog() {
   const { t } = useTranslation()
-  const { getSecurityQuestion, resetPasswordWithAnswer } = useAuth()
+  const { getRecoveryMethod, resetPasswordWithAnswer, resetPasswordWithTotp } = useAuth()
   const [open, setOpen] = useState(false)
   const [step, setStep] = useState<Step>("email")
   const [email, setEmail] = useState("")
   const [question, setQuestion] = useState("")
   const [answer, setAnswer] = useState("")
+  const [totpCode, setTotpCode] = useState("")
   const [newPassword, setNewPassword] = useState("")
   const [confirmPassword, setConfirmPassword] = useState("")
   const [error, setError] = useState("")
@@ -35,6 +36,7 @@ export function ForgotPasswordDialog() {
     setEmail("")
     setQuestion("")
     setAnswer("")
+    setTotpCode("")
     setNewPassword("")
     setConfirmPassword("")
     setError("")
@@ -42,28 +44,46 @@ export function ForgotPasswordDialog() {
 
   async function handleEmailSubmit(e: React.FormEvent) {
     e.preventDefault()
-    const q = await getSecurityQuestion(email)
-    if (!q) {
+    const result = await getRecoveryMethod(email)
+    if (result.method === "totp") {
+      setStep("totp")
+    } else if (result.method === "question") {
+      setQuestion(result.question)
+      setStep("question")
+    } else {
       setStep("none")
-      return
     }
-    setQuestion(q)
-    setStep("answer")
+  }
+
+  function validateNewPassword() {
+    if (newPassword.length < 6) {
+      setError(t.account.passwordTooShort)
+      return false
+    }
+    if (newPassword !== confirmPassword) {
+      setError(t.account.passwordMismatch)
+      return false
+    }
+    return true
   }
 
   async function handleAnswerSubmit(e: React.FormEvent) {
     e.preventDefault()
-    if (newPassword.length < 6) {
-      setError(t.account.passwordTooShort)
-      return
-    }
-    if (newPassword !== confirmPassword) {
-      setError(t.account.passwordMismatch)
-      return
-    }
+    if (!validateNewPassword()) return
     const ok = await resetPasswordWithAnswer(email, answer, newPassword)
     if (!ok) {
       setError(t.login.forgotWrongAnswer)
+      return
+    }
+    setStep("done")
+  }
+
+  async function handleTotpSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    if (!validateNewPassword()) return
+    const ok = await resetPasswordWithTotp(email, totpCode, newPassword)
+    if (!ok) {
+      setError(t.login.forgotWrongTotp)
       return
     }
     setStep("done")
@@ -113,10 +133,18 @@ export function ForgotPasswordDialog() {
         ) : null}
 
         {step === "none" ? (
-          <p className="text-sm text-muted-foreground">{t.login.forgotNoQuestion}</p>
+          <div className="flex flex-col gap-3">
+            <p className="text-sm text-muted-foreground">{t.login.forgotNoQuestion}</p>
+            <div className="rounded-lg border bg-muted/50 p-3">
+              <p className="text-xs text-muted-foreground">{t.login.forgotCliHint}</p>
+              <code className="mt-1 block rounded bg-background px-2 py-1.5 text-xs">
+                bun run reset-password
+              </code>
+            </div>
+          </div>
         ) : null}
 
-        {step === "answer" ? (
+        {step === "question" ? (
           <form onSubmit={handleAnswerSubmit}>
             <FieldGroup>
               <p className="text-sm font-medium">{question}</p>
@@ -155,6 +183,63 @@ export function ForgotPasswordDialog() {
                 </FieldLabel>
                 <Input
                   id="forgot-confirm-password"
+                  type="password"
+                  required
+                  value={confirmPassword}
+                  onChange={(e) => {
+                    setConfirmPassword(e.target.value)
+                    setError("")
+                  }}
+                />
+              </Field>
+              {error ? <p className="text-sm text-destructive">{error}</p> : null}
+              <Button type="submit" className="w-full">
+                {t.account.changePassword}
+              </Button>
+            </FieldGroup>
+          </form>
+        ) : null}
+
+        {step === "totp" ? (
+          <form onSubmit={handleTotpSubmit}>
+            <FieldGroup>
+              <p className="text-sm text-muted-foreground">{t.login.forgotTotpStep}</p>
+              <Field>
+                <FieldLabel htmlFor="forgot-totp-code">{t.account.totpCodeLabel}</FieldLabel>
+                <Input
+                  id="forgot-totp-code"
+                  required
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  placeholder="000000"
+                  value={totpCode}
+                  onChange={(e) => {
+                    setTotpCode(e.target.value)
+                    setError("")
+                  }}
+                />
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="forgot-totp-new-password">
+                  {t.account.newPassword}
+                </FieldLabel>
+                <Input
+                  id="forgot-totp-new-password"
+                  type="password"
+                  required
+                  value={newPassword}
+                  onChange={(e) => {
+                    setNewPassword(e.target.value)
+                    setError("")
+                  }}
+                />
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="forgot-totp-confirm-password">
+                  {t.account.confirmNewPassword}
+                </FieldLabel>
+                <Input
+                  id="forgot-totp-confirm-password"
                   type="password"
                   required
                   value={confirmPassword}

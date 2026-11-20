@@ -47,6 +47,8 @@ import {
   ALL_PAYMENT_METHODS,
   formatDate,
   formatEuro,
+  formatFirstName,
+  formatLastName,
   UNCATEGORIZED_COURSE,
   type CourseType,
   type PaymentMethod,
@@ -81,9 +83,17 @@ export function ClientsTable() {
   const [deleteBusy, setDeleteBusy] = useState(false)
   const [invoicePickerTarget, setInvoicePickerTarget] = useState<{
     name: string
+    firstName: string
+    lastName: string
     matches: ReturnType<typeof findClientPayments>
   } | null>(null)
   const [previewTxId, setPreviewTxId] = useState<string | null>(null)
+  // La facture générée depuis la fiche d'un adhérent doit porter SON nom, même si le paiement
+  // retrouvé est au nom du payeur (ex. un parent qui règle par Stripe pour son enfant) : le payeur
+  // sert à retrouver la transaction, pas à décider à qui la facture est adressée.
+  const [forcedInvoiceName, setForcedInvoiceName] = useState<{ firstName: string; lastName: string } | null>(
+    null,
+  )
 
   function statusStyle(course: CourseType) {
     if (course === "Non catégorisé") return UNCATEGORIZED_STYLE
@@ -148,16 +158,22 @@ export function ClientsTable() {
    * retrouvée (correspondance par nom, directe ou via le payeur — ex. un parent qui règle par
    * Stripe pour son enfant, voir findClientPayments). Une seule correspondance : ouvre directement
    * l'aperçu. Plusieurs : l'utilisateur choisit laquelle facturer. */
-  function openInvoice(clientName: string, matches: ReturnType<typeof findClientPayments>) {
+  function openInvoice(
+    clientName: string,
+    firstName: string,
+    lastName: string,
+    matches: ReturnType<typeof findClientPayments>,
+  ) {
     if (matches.length === 0) {
       toast.error(t.clients.invoiceNoTransaction)
       return
     }
+    setForcedInvoiceName({ firstName, lastName })
     if (matches.length === 1) {
       setPreviewTxId(matches[0].transaction.id)
       return
     }
-    setInvoicePickerTarget({ name: clientName, matches })
+    setInvoicePickerTarget({ name: clientName, firstName, lastName, matches })
   }
 
   async function handleDeleteConfirm() {
@@ -247,8 +263,8 @@ export function ClientsTable() {
 
               return (
                 <TableRow key={c.id}>
-                  <TableCell className="font-medium">{c.firstName}</TableCell>
-                  <TableCell className="font-medium">{c.lastName}</TableCell>
+                  <TableCell className="font-medium">{formatFirstName(c.firstName)}</TableCell>
+                  <TableCell className="font-medium">{formatLastName(c.lastName)}</TableCell>
                   <TableCell className="text-muted-foreground">
                     {c.email}
                   </TableCell>
@@ -360,7 +376,14 @@ export function ClientsTable() {
                         variant="ghost"
                         size="icon-sm"
                         aria-label={t.clients.generateInvoice}
-                        onClick={() => openInvoice(`${c.firstName} ${c.lastName}`.trim(), matches)}
+                        onClick={() =>
+                          openInvoice(
+                            `${c.firstName} ${c.lastName}`.trim(),
+                            formatFirstName(c.firstName),
+                            formatLastName(c.lastName),
+                            matches,
+                          )
+                        }
                       >
                         <ReceiptTextIcon />
                       </Button>
@@ -450,8 +473,12 @@ export function ClientsTable() {
 
       <ReceiptPreviewDialog
         transactionId={previewTxId}
+        forcedName={forcedInvoiceName}
         onOpenChange={(open) => {
-          if (!open) setPreviewTxId(null)
+          if (!open) {
+            setPreviewTxId(null)
+            setForcedInvoiceName(null)
+          }
         }}
       />
     </div>

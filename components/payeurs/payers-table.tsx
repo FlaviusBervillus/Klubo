@@ -32,6 +32,7 @@ import {
 } from "@/components/ui/table"
 import { AddPayerDialog } from "@/components/payeurs/add-payer-dialog"
 import { useClientsStore } from "@/lib/clients-store"
+import { formatFirstName, formatLastName } from "@/lib/mock-data"
 import { usePayersStore } from "@/lib/payers-store"
 import { useSeasonClients, useSeasons } from "@/lib/seasons-store"
 import { useTranslation } from "@/lib/i18n/context"
@@ -162,8 +163,8 @@ export function PayersTable() {
               const otherSeasonsCount = linkedAllTime.length - linkedThisSeason.length
               return (
                 <TableRow key={payer.id}>
-                  <TableCell className="font-medium">{payer.firstName}</TableCell>
-                  <TableCell className="font-medium">{payer.lastName}</TableCell>
+                  <TableCell className="font-medium">{formatFirstName(payer.firstName)}</TableCell>
+                  <TableCell className="font-medium">{formatLastName(payer.lastName)}</TableCell>
                   <TableCell className="text-muted-foreground">{payer.email || "—"}</TableCell>
                   <TableCell className="text-muted-foreground">{payer.phone || "—"}</TableCell>
                   <TableCell>

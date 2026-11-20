@@ -11,7 +11,8 @@
     "lint": "next lint",
     "electron": "electron .",
     "electron:build": "next build && electron-builder",
-    "release": "node scripts/release.js"
+    "release": "node scripts/release.js",
+    "reset-password": "bun scripts/reset-password.js"
   },
   "dependencies": {
     "@base-ui/react": "^1.5.0",
