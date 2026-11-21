@@ -20,7 +20,7 @@ import { useQuotesStore } from "@/lib/quotes-store"
 import { formatDate, formatEuro } from "@/lib/mock-data"
 import { useTranslation } from "@/lib/i18n/context"
 
-export function QuotesTable() {
+export function QuotesTable({ search }: { search: string }) {
   const { t } = useTranslation()
   const { quotes, deleteQuote } = useQuotesStore()
   const [previewId, setPreviewId] = useState<string | null>(null)
@@ -38,6 +38,14 @@ export function QuotesTable() {
     toast.success(t.devis.quoteDeleted)
   }
 
+  const query = search.trim().toLowerCase()
+  const filteredQuotes = quotes.filter(
+    (quote) =>
+      !query ||
+      quote.number.toLowerCase().includes(query) ||
+      recipientName(quote).toLowerCase().includes(query),
+  )
+
   return (
     <div className="flex flex-col gap-4">
       <div className="overflow-hidden rounded-lg border">
@@ -52,7 +60,7 @@ export function QuotesTable() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {quotes.map((quote) => (
+            {filteredQuotes.map((quote) => (
               <TableRow key={quote.id}>
                 <TableCell className="whitespace-nowrap">{formatDate(quote.date)}</TableCell>
                 <TableCell className="text-muted-foreground">{quote.number || "—"}</TableCell>
@@ -86,9 +94,11 @@ export function QuotesTable() {
           </TableBody>
         </Table>
 
-        {quotes.length === 0 ? (
+        {filteredQuotes.length === 0 ? (
           <Empty className="border-0">
-            <p className="text-sm text-muted-foreground">{t.devis.noQuotes}</p>
+            <p className="text-sm text-muted-foreground">
+              {query ? t.devis.noSearchResults : t.devis.noQuotes}
+            </p>
           </Empty>
         ) : null}
       </div>

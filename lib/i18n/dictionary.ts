@@ -180,6 +180,8 @@ export interface Dictionary {
     linkedMember: string
     linkedAdherentLabel: string
     linkedAdherentHint: string
+    invoiceNumber: string
+    invoiceNumberPending: string
     guardianHint: string
     none: string
     receipt: string
@@ -660,6 +662,7 @@ export interface Dictionary {
     childrenLabel: string
     noOtherAdherents: string
     saveFirstForLinksHint: string
+    childSearchPlaceholder: string
     noPayers: string
     cascadeDeleteTitle: string
     cascadeDeleteDescription: string
@@ -714,6 +717,13 @@ export interface Dictionary {
     download: string
     downloaded: string
     downloadError: string
+    searchPlaceholder: string
+    quotesSectionTitle: string
+    invoicesSectionTitle: string
+    colInvoicePayer: string
+    colInvoiceAmount: string
+    noInvoices: string
+    noSearchResults: string
   }
   materiel: {
     title: string

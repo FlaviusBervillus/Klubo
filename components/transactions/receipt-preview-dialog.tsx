@@ -24,6 +24,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { usePayersStore } from "@/lib/payers-store"
+import { useTransactionsStore } from "@/lib/transactions-store"
 import { useTranslation } from "@/lib/i18n/context"
 import type { ReceiptOverrides } from "@/types/electron"
 
@@ -66,6 +67,7 @@ export function ReceiptPreviewDialog({
 }: ReceiptPreviewDialogProps) {
   const { t } = useTranslation()
   const { payers } = usePayersStore()
+  const { refresh: refreshTransactions } = useTransactionsStore()
   const clientItems = payers.map((p) => ({ value: p.id, label: `${p.firstName} ${p.lastName}`.trim() }))
   const [loading, setLoading] = useState(false)
   const [hasResolvedClient, setHasResolvedClient] = useState(false)
@@ -122,6 +124,10 @@ export function ReceiptPreviewDialog({
           address: result.client?.address ?? "",
         })
         setStripeInvoicePdfUrl(result.stripeInvoicePdfUrl ?? null)
+        // Le premier aperçu attribue définitivement le numéro de facture (voir
+        // getOrAssignInvoiceNumber côté Electron) — on rafraîchit le store pour que ce numéro
+        // apparaisse aussitôt ailleurs dans l'app (fiche transaction, onglet Devis & Factures).
+        refreshTransactions()
       } else {
         toast.error(result.error || t.receiptPreview.title)
       }

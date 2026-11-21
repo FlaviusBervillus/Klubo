@@ -66,6 +66,14 @@ export interface Transaction {
   /** Adhérent explicitement associé à cette transaction (ex. l'enfant dont ce règlement couvre la
    * cotisation) : prime sur "member" pour désigner à qui la facture doit être adressée. */
   linkedClientId: string | null
+  /** Payeur explicitement associé (ex. nom saisi à la main quand Stripe n'en fournit aucun) : sert à
+   * générer la facture quand aucun adhérent n'est lié et que la détection Stripe automatique échoue
+   * (payeur non-adhérent, ex. un stagiaire). Jamais écrasé par une resynchro. */
+  linkedPayerId: string | null
+  /** Numéro de facture attribué au premier aperçu/téléchargement (voir getOrAssignInvoiceNumber côté
+   * Electron), ex. "202611211" — null tant qu'aucune facture n'a encore été générée pour cette
+   * transaction. Ne change jamais une fois posé. */
+  invoiceNumber: string | null
 }
 
 /* ---------- Comptes & rôles ---------- */

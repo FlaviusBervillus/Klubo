@@ -26,6 +26,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
     deletePayer: (id) => ipcRenderer.invoke("db:deletePayer", id),
     deletePayerCascade: (id) => ipcRenderer.invoke("db:deletePayerCascade", id),
     ensurePayerForClient: (clientId) => ipcRenderer.invoke("db:ensurePayerForClient", clientId),
+    findOrCreatePayerByName: (firstName, lastName) =>
+      ipcRenderer.invoke("db:findOrCreatePayerByName", firstName, lastName),
     analyzeExcelImport: () => ipcRenderer.invoke("clients:analyze-excel-import"),
     applyExcelImport: (items, decisions) =>
       ipcRenderer.invoke("clients:apply-excel-import", items, decisions),

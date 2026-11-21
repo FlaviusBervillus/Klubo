@@ -22,6 +22,8 @@ function rowToTransaction(row: DbTransaction): Transaction {
     description: row.description,
     member: row.member,
     linkedClientId: row.linked_client_id ?? null,
+    linkedPayerId: row.linked_payer_id ?? null,
+    invoiceNumber: row.invoice_number ?? null,
     method: row.method as PaymentMethod,
     category: (row.category ?? "Non catégorisé") as Category,
     type: row.type as TransactionType,
@@ -66,6 +68,7 @@ const TransactionsContext = createContext<{
   updateMember: (id: string, member: string | null) => Promise<void>
   updateDescription: (id: string, description: string) => Promise<void>
   updateLinkedClient: (id: string, clientId: string | null) => Promise<void>
+  updateLinkedPayer: (id: string, payerId: string | null) => Promise<void>
   addTransaction: (input: NewTransaction) => Promise<void>
   refresh: () => Promise<void>
 } | null>(null)
@@ -126,6 +129,15 @@ export function TransactionsProvider({ children }: { children: React.ReactNode }
     )
   }
 
+  async function updateLinkedPayer(id: string, payerId: string | null) {
+    const electronApi = api()
+    if (!electronApi) return
+    await electronApi.db.updateTransaction(id, { linkedPayerId: payerId })
+    setTransactions((prev) =>
+      prev.map((tx) => (tx.id === id ? { ...tx, linkedPayerId: payerId } : tx)),
+    )
+  }
+
   async function addTransaction(input: NewTransaction) {
     const electronApi = api()
     if (!electronApi) return
@@ -148,6 +160,7 @@ export function TransactionsProvider({ children }: { children: React.ReactNode }
         updateMember,
         updateDescription,
         updateLinkedClient,
+        updateLinkedPayer,
         addTransaction,
         refresh,
       }}

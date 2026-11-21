@@ -62,12 +62,14 @@ export function AddPayerDialog({ payer }: { payer?: Payer } = {}) {
   const [open, setOpen] = useState(false)
   const [form, setForm] = useState<NewPayer>(payer ? formFromPayer(payer) : emptyForm)
   const [pendingSelfPick, setPendingSelfPick] = useState(false)
+  const [childSearch, setChildSearch] = useState("")
   const isEdit = !!payer
 
   useEffect(() => {
     if (open) {
       setForm(payer ? formFromPayer(payer) : emptyForm)
       setPendingSelfPick(false)
+      setChildSearch("")
     }
   }, [open, payer])
 
@@ -276,25 +278,40 @@ export function AddPayerDialog({ payer }: { payer?: Payer } = {}) {
                 {otherClients.filter((c) => c.id !== selfClient?.id).length === 0 ? (
                   <p className="text-xs text-muted-foreground">{t.payers.noOtherAdherents}</p>
                 ) : (
-                  <div className="flex flex-wrap gap-1.5">
-                    {otherClients
-                      .filter((c) => c.id !== selfClient?.id)
-                      .map((c) => {
-                        const isChild = childClients.some((child) => child.id === c.id)
-                        return (
-                          <Button
-                            key={c.id}
-                            type="button"
-                            variant={isChild ? "default" : "outline"}
-                            size="sm"
-                            className="h-7 px-2 text-xs"
-                            onClick={() => toggleChild(c)}
-                          >
-                            {clientFullName(c)}
-                          </Button>
+                  <>
+                    <Input
+                      value={childSearch}
+                      onChange={(e) => setChildSearch(e.target.value)}
+                      placeholder={t.payers.childSearchPlaceholder}
+                      className="mb-1.5"
+                    />
+                    {/* Liste potentiellement longue (des dizaines d'adhérents) : plafonnée et
+                     * défilante indépendamment du reste du formulaire. */}
+                    <div className="flex max-h-40 flex-wrap gap-1.5 overflow-y-auto">
+                      {otherClients
+                        .filter((c) => c.id !== selfClient?.id)
+                        .filter((c) =>
+                          childSearch
+                            ? clientFullName(c).toLowerCase().includes(childSearch.toLowerCase())
+                            : true,
                         )
-                      })}
-                  </div>
+                        .map((c) => {
+                          const isChild = childClients.some((child) => child.id === c.id)
+                          return (
+                            <Button
+                              key={c.id}
+                              type="button"
+                              variant={isChild ? "default" : "outline"}
+                              size="sm"
+                              className="h-7 px-2 text-xs"
+                              onClick={() => toggleChild(c)}
+                            >
+                              {clientFullName(c)}
+                            </Button>
+                          )
+                        })}
+                    </div>
+                  </>
                 )}
               </Field>
             </FieldGroup>

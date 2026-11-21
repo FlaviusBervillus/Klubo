@@ -83,6 +83,7 @@ export function TransactionDetailView() {
     updateMember: updateMemberInStore,
     updateDescription: updateDescriptionInStore,
     updateLinkedClient: updateLinkedClientInStore,
+    updateLinkedPayer: updateLinkedPayerInStore,
   } = useTransactionsStore()
   const { clients, updateClient } = useClientsStore()
   const { payers } = usePayersStore()
@@ -178,6 +179,25 @@ export function TransactionDetailView() {
 
   function reassignToChild(childId: string) {
     updateLinkedClientInStore(txId, childId)
+  }
+
+  /** Saisir un nom dans "Payeur lié" doit vraiment LIER un payeur (pas juste afficher du texte) pour
+   * que la facture puisse être générée même quand Stripe n'a fourni aucun nom (carte sans nom de
+   * facturation) ou pour un stagiaire sans fiche existante — on retrouve ou crée le payeur
+   * correspondant, et ce lien explicite survit à toute resynchro Stripe (voir resolveClientForInvoice). */
+  async function updateMemberAndLinkPayer(value: string) {
+    await updateMemberInStore(txId, value || null)
+    if (!value) {
+      await updateLinkedPayerInStore(txId, null)
+      return
+    }
+    const electronApi = window.electronAPI
+    if (!electronApi) return
+    const parts = value.trim().split(/\s+/)
+    const firstName = parts[0] || ""
+    const lastName = parts.slice(1).join(" ") || ""
+    const payerId = await electronApi.db.findOrCreatePayerByName(firstName, lastName)
+    await updateLinkedPayerInStore(txId, payerId)
   }
 
   return (
@@ -287,30 +307,24 @@ export function TransactionDetailView() {
             </MetaRow>
             <Separator />
             <MetaRow icon={UserIcon} label={t.transactionDetail.linkedMember}>
-              {isManualCashOrCheque ? (
-                <>
-                  <Input
-                    key={`${tx.id}-${tx.member ?? ""}`}
-                    list="linked-payer-suggestions"
-                    defaultValue={tx.member ?? ""}
-                    placeholder={t.transactionDetail.none}
-                    className="h-7 w-44 border-transparent bg-transparent px-2 text-right text-sm font-medium hover:border-input"
-                    onBlur={(e) => {
-                      const value = e.target.value.trim()
-                      if (value !== (tx.member ?? "")) {
-                        updateMemberInStore(txId, value || null)
-                      }
-                    }}
-                  />
-                  <datalist id="linked-payer-suggestions">
-                    {payers.map((p) => (
-                      <option key={p.id} value={`${p.firstName} ${p.lastName}`.trim()} />
-                    ))}
-                  </datalist>
-                </>
-              ) : (
-                tx.member || t.transactionDetail.none
-              )}
+              <Input
+                key={`${tx.id}-${tx.member ?? ""}`}
+                list="linked-payer-suggestions"
+                defaultValue={tx.member ?? ""}
+                placeholder={t.transactionDetail.none}
+                className="h-7 w-44 border-transparent bg-transparent px-2 text-right text-sm font-medium hover:border-input"
+                onBlur={(e) => {
+                  const value = e.target.value.trim()
+                  if (value !== (tx.member ?? "")) {
+                    updateMemberAndLinkPayer(value)
+                  }
+                }}
+              />
+              <datalist id="linked-payer-suggestions">
+                {payers.map((p) => (
+                  <option key={p.id} value={`${p.firstName} ${p.lastName}`.trim()} />
+                ))}
+              </datalist>
             </MetaRow>
             <Separator />
             <MetaRow icon={UserIcon} label={t.transactionDetail.linkedAdherentLabel}>
@@ -335,6 +349,10 @@ export function TransactionDetailView() {
               </Select>
             </MetaRow>
             <p className="px-1 pb-1 text-xs text-muted-foreground">{t.transactionDetail.linkedAdherentHint}</p>
+            <Separator />
+            <MetaRow icon={FileTextIcon} label={t.transactionDetail.invoiceNumber}>
+              <span className="font-mono text-sm">{tx.invoiceNumber || t.transactionDetail.invoiceNumberPending}</span>
+            </MetaRow>
             {linkedChildren.length > 0 && !tx.linkedClientId ? (
               <div className="flex flex-wrap items-center gap-1.5 px-1 pt-2 pb-1">
                 <span className="text-xs text-muted-foreground">

@@ -245,6 +245,17 @@ function migrate(db) {
   // PAYEUR tel qu'il apparaît sur le règlement) : utile quand un parent et son enfant sont tous les
   // deux adhérents mais qu'un seul paie — la facture doit nommer l'enfant, pas le parent qui a réglé.
   ensureColumn(db, "transactions", "linked_client_id", "linked_client_id TEXT")
+  // Payeur explicitement associé à cette transaction — utile quand Stripe ne fournit aucun nom
+  // (carte payée sans nom de facturation) ou pour une écriture manuelle : contrairement à "member"
+  // (texte libre, affichage seulement), ceci est un vrai lien vers la fiche payeur, utilisé pour
+  // générer la facture, et jamais touché par une resynchro Stripe (voir upsertTransactionByChargeId,
+  // dont l'UPDATE ne référence ni member ni linked_payer_id).
+  ensureColumn(db, "transactions", "linked_payer_id", "linked_payer_id TEXT")
+  // Numéro de facture (ex. "202611211" = date du règlement "20261121" + 1er numéro attribué ce
+  // jour-là), attribué une seule fois au premier aperçu/téléchargement de la facture puis conservé
+  // définitivement (voir getOrAssignInvoiceNumber) — ne doit jamais être recalculé ensuite, y compris
+  // après une resynchro Stripe, pour rester une référence stable sur les documents déjà remis.
+  ensureColumn(db, "transactions", "invoice_number", "invoice_number TEXT")
   // Une fois que le trésorier a corrigé à la main le nom d'un payeur (ex. mise en forme NOM/Prénom,
   // faute de frappe Stripe), une resynchro Stripe ne doit plus jamais l'écraser — voir
   // upsertPayerByStripeId/upsertGuestPayer.
@@ -518,6 +529,42 @@ function createPayer(payer) {
       city: payer.city || "",
     })
   return id
+}
+
+/** Retrouve le payeur portant exactement ce nom (insensible à la casse/espaces), sinon en crée un —
+ * utilisé quand le trésorier tape un nom dans "Payeur lié" sur une transaction sans payeur
+ * automatiquement détecté (ex. carte Stripe sans nom de facturation, stagiaire non-adhérent). */
+function findOrCreatePayerByName(firstName, lastName) {
+  const existing = getDb()
+    .prepare(
+      `SELECT id FROM payers WHERE lower(trim(first_name)) = lower(trim(@firstName)) AND lower(trim(last_name)) = lower(trim(@lastName))`,
+    )
+    .get({ firstName, lastName })
+  if (existing) return existing.id
+  return createPayer({ firstName, lastName, email: "", phone: "", address: "", postalCode: "", city: "" })
+}
+
+/** Numéro de document basé sur une date, ex. "202611211" pour le 1er document du 21/11/2026
+ * ("20261121" + rang du jour) — partagé par les factures (transactions.invoice_number) et les
+ * devis (quotes.number) pour garder la même convention de numérotation. */
+function nextNumberForDate(table, column, dateStr) {
+  const datePart = (dateStr || new Date().toISOString()).slice(0, 10).replace(/-/g, "")
+  const row = getDb()
+    .prepare(`SELECT COUNT(*) as count FROM ${table} WHERE ${column} LIKE @prefix`)
+    .get({ prefix: `${datePart}%` })
+  return `${datePart}${(row?.count || 0) + 1}`
+}
+
+/** Attribue un numéro de facture à une transaction au premier appel (aperçu ou téléchargement) puis
+ * le renvoie tel quel ensuite — ne doit jamais changer une fois posé, voir ensureColumn ci-dessus. */
+function getOrAssignInvoiceNumber(transactionId) {
+  const db = getDb()
+  const tx = db.prepare("SELECT id, date, invoice_number FROM transactions WHERE id = ?").get(transactionId)
+  if (!tx) return null
+  if (tx.invoice_number) return tx.invoice_number
+  const number = nextNumberForDate("transactions", "invoice_number", tx.date)
+  db.prepare("UPDATE transactions SET invoice_number = @number WHERE id = @id").run({ number, id: transactionId })
+  return number
 }
 
 function updatePayer(id, patch) {
@@ -930,6 +977,7 @@ function updateTransaction(id, patch) {
     ["method", "method"],
     ["member", "member"],
     ["linkedClientId", "linked_client_id"],
+    ["linkedPayerId", "linked_payer_id"],
     ["stripeNet", "stripe_net"],
     ["stripeInvoicePdfUrl", "stripe_invoice_pdf_url"],
   ]) {
@@ -1395,13 +1443,16 @@ const QUOTE_FIELD_TO_COLUMN = {
 
 function createQuote(quote) {
   const id = quote.id || crypto.randomUUID()
+  // Même convention que les factures (voir nextNumberForDate/getOrAssignInvoiceNumber) : si le
+  // trésorier n'a pas saisi de numéro à la main, on en attribue un basé sur la date du devis.
+  const number = quote.number?.trim() ? quote.number : nextNumberForDate("quotes", "number", quote.date)
   const columns = ["id"]
   const placeholders = ["@id"]
   const params = { id }
   for (const [key, column] of Object.entries(QUOTE_FIELD_TO_COLUMN)) {
     columns.push(column)
     placeholders.push(`@${key}`)
-    params[key] = quote[key] ?? ""
+    params[key] = (key === "number" ? number : quote[key]) ?? ""
   }
   getDb()
     .prepare(`INSERT INTO quotes (${columns.join(", ")}) VALUES (${placeholders.join(", ")})`)
@@ -1458,6 +1509,8 @@ module.exports = {
   getPayers,
   getPayerById,
   createPayer,
+  findOrCreatePayerByName,
+  getOrAssignInvoiceNumber,
   updatePayer,
   deletePayer,
   deletePayerCascade,

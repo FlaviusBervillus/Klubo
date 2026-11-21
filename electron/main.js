@@ -118,6 +118,9 @@ ipcMain.handle("db:updatePayer", (_e, id, patch) => db.updatePayer(id, patch))
 ipcMain.handle("db:deletePayer", (_e, id) => db.deletePayer(id))
 ipcMain.handle("db:deletePayerCascade", (_e, id) => db.deletePayerCascade(id))
 ipcMain.handle("db:ensurePayerForClient", (_e, clientId) => db.ensurePayerForClient(clientId))
+ipcMain.handle("db:findOrCreatePayerByName", (_e, firstName, lastName) =>
+  db.findOrCreatePayerByName(firstName, lastName),
+)
 
 ipcMain.handle("clients:analyze-excel-import", async () => {
   try {
@@ -348,6 +351,12 @@ function resolveClientForInvoice(tx, forcedClientId) {
     const client = db.getClientById(clientId)
     if (client) return resolveClientIdentity(client)
   }
+  // Un payeur explicitement lié (ex. nom saisi à la main quand Stripe n'en fournit aucun) prime sur
+  // la détection automatique, qui ne marche que pour les charges Stripe avec nom/email de facturation.
+  if (tx.linked_payer_id) {
+    const payer = db.getPayerById(tx.linked_payer_id)
+    if (payer) return payer
+  }
   return db.findPayerForTransaction(tx)
 }
 
@@ -383,9 +392,17 @@ ipcMain.handle("receipts:prepare", (_e, transactionId, forcedClientId) => {
   const tx = db.getTransactionById(transactionId)
   if (!tx) return { ok: false, error: "Transaction introuvable" }
   const client = resolveClientForInvoice(tx, forcedClientId)
+  const invoiceNumber = db.getOrAssignInvoiceNumber(tx.id)
   return {
     ok: true,
-    tx: { id: tx.id, description: tx.description, amount: tx.amount, date: tx.date, method: tx.method },
+    tx: {
+      id: tx.id,
+      description: tx.description,
+      amount: tx.amount,
+      date: tx.date,
+      method: tx.method,
+      invoiceNumber,
+    },
     client: client ?? null,
     stripeInvoicePdfUrl: tx.stripe_invoice_pdf_url || null,
   }
@@ -440,7 +457,11 @@ ipcMain.handle("receipts:render-preview", (_e, transactionId, overrides, forcedC
   try {
     const tx = db.getTransactionById(transactionId)
     if (!tx) return { ok: false, error: "Transaction introuvable" }
-    const txForInvoice = applyDescriptionSuffix(tx, computeDescriptionSuffix(tx, forcedClientId))
+    const invoiceNumber = db.getOrAssignInvoiceNumber(tx.id)
+    const txForInvoice = applyDescriptionSuffix(
+      { ...tx, invoice_number: invoiceNumber },
+      computeDescriptionSuffix(tx, forcedClientId),
+    )
     const html = renderInvoiceHtml(txForInvoice, getClubSettings(), resolveClient(tx, overrides, forcedClientId))
     return { ok: true, html }
   } catch (err) {
@@ -452,7 +473,11 @@ ipcMain.handle("receipts:download", async (_e, transactionId, overrides, forcedC
   try {
     const tx = db.getTransactionById(transactionId)
     if (!tx) return { ok: false, error: "Transaction introuvable" }
-    const txForInvoice = applyDescriptionSuffix(tx, computeDescriptionSuffix(tx, forcedClientId))
+    const invoiceNumber = db.getOrAssignInvoiceNumber(tx.id)
+    const txForInvoice = applyDescriptionSuffix(
+      { ...tx, invoice_number: invoiceNumber },
+      computeDescriptionSuffix(tx, forcedClientId),
+    )
     let client = resolveClient(tx, overrides, forcedClientId)
     if (overrides) {
       const payerId = overrides.clientId || db.findPayerForTransaction(tx)?.id || null
@@ -587,7 +612,11 @@ ipcMain.handle("receipts:download-bulk", async (_e, items) => {
         // mais le fichier reste nommé d'après l'adhérent lui-même — plus simple à retrouver dans le
         // dossier d'export, même quand plusieurs enfants partagent le même payeur.
         const client = resolveClientIdentity(adherent)
-        const txForInvoice = applyDescriptionSuffix(tx, computeDescriptionSuffix(tx, item.clientId))
+        const invoiceNumber = db.getOrAssignInvoiceNumber(tx.id)
+        const txForInvoice = applyDescriptionSuffix(
+          { ...tx, invoice_number: invoiceNumber },
+          computeDescriptionSuffix(tx, item.clientId),
+        )
         const pdfBuffer = await generateReceiptPdf(txForInvoice, settings, client)
         const filePath = uniqueReceiptFilename(dir, adherentFirstName, adherentLastName, usedNames)
         fs.writeFileSync(filePath, pdfBuffer)

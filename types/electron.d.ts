@@ -182,6 +182,8 @@ export interface DbTransaction {
   stripe_raw_json: string | null
   stripe_invoice_pdf_url: string | null
   linked_client_id: string | null
+  linked_payer_id: string | null
+  invoice_number: string | null
 }
 
 export interface DbBankTransaction {
@@ -236,6 +238,7 @@ declare global {
         deletePayer: (id: string) => Promise<void>
         deletePayerCascade: (id: string) => Promise<{ ok: true; deletedClients: number }>
         ensurePayerForClient: (clientId: string) => Promise<string | null>
+        findOrCreatePayerByName: (firstName: string, lastName: string) => Promise<string>
 
         analyzeExcelImport: () => Promise<
           | { ok: true; items: ImportPlanItem[] }
@@ -323,7 +326,14 @@ declare global {
       prepareReceipt: (transactionId: string, forcedClientId?: string | null) => Promise<
         | {
             ok: true
-            tx: { id: string; description: string; amount: number; date: string; method: string }
+            tx: {
+              id: string
+              description: string
+              amount: number
+              date: string
+              method: string
+              invoiceNumber: string | null
+            }
             client: DbPayer | null
             stripeInvoicePdfUrl: string | null
           }
