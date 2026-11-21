@@ -211,6 +211,7 @@ export const en: Dictionary = {
     linkedAdherentHint: "Who to invoice, if different from the payer (e.g. a child whose parent pays the dues).",
     invoiceNumber: "Invoice no.",
     invoiceNumberPending: "Not generated yet",
+    pickExistingPayer: "Pick an existing payer",
     guardianHint: "Has children enrolled — bill instead to:",
     none: "None",
     receipt: "Receipt",

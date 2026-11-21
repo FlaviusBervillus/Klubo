@@ -182,6 +182,7 @@ export interface Dictionary {
     linkedAdherentHint: string
     invoiceNumber: string
     invoiceNumberPending: string
+    pickExistingPayer: string
     guardianHint: string
     none: string
     receipt: string

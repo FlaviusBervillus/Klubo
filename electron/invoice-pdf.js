@@ -130,17 +130,12 @@ function renderInvoiceHtml(tx, club, client) {
 </head>
 <body>
   <div class="top-row">
-    <h1>Facture</h1>
+    <h1>Facture${tx.invoice_number ? ` n° ${escapeHtml(tx.invoice_number)}` : ""}</h1>
     ${club.logoUrl ? `<img class="logo" src="${club.logoUrl}" alt="" />` : ""}
   </div>
 
   <div class="meta-row">
     <span class="meta-label">Date de la facture</span> &nbsp; ${formatLongDate(tx.date)}
-    ${
-      tx.invoice_number
-        ? `&nbsp;&nbsp;&nbsp; <span class="meta-label">Facture n°</span> &nbsp; ${escapeHtml(tx.invoice_number)}`
-        : ""
-    }
   </div>
 
   <div class="columns">

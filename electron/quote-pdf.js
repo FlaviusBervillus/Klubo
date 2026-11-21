@@ -89,7 +89,7 @@ function renderQuoteHtml(quote, club) {
 <body>
   <div class="top-row">
     <div class="titles">
-      <h1>${escapeHtml(quote.title || "DEVIS")}</h1>
+      <h1>${escapeHtml(quote.title || "DEVIS")}${quote.number ? ` n° ${escapeHtml(quote.number)}` : ""}</h1>
       ${quote.subtitle ? `<div class="subtitle">${escapeHtml(quote.subtitle)}</div>` : ""}
       ${quote.seasonLabel ? `<div class="season">${escapeHtml(quote.seasonLabel)}</div>` : ""}
     </div>
@@ -98,7 +98,6 @@ function renderQuoteHtml(quote, club) {
 
   <div class="meta-row">
     <span><span class="meta-label">Date</span> &nbsp; ${formatLongDate(quote.date)}</span>
-    <span><span class="meta-label">N° du devis</span> &nbsp; ${quote.number ? escapeHtml(quote.number) : "à renseigner"}</span>
   </div>
 
   ${quote.validityText ? `<div class="validity">${escapeHtml(quote.validityText)}</div>` : ""}

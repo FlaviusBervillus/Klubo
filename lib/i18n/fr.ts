@@ -211,6 +211,7 @@ export const fr: Dictionary = {
     linkedAdherentHint: "À qui adresser la facture, si différent du payeur (ex. un enfant dont le parent règle la cotisation).",
     invoiceNumber: "N° de facture",
     invoiceNumberPending: "Pas encore générée",
+    pickExistingPayer: "Choisir un payeur existant",
     guardianHint: "A des enfants inscrits — facturer plutôt à :",
     none: "Aucun",
     receipt: "Justificatif",

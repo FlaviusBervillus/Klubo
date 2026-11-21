@@ -14,6 +14,7 @@ import {
   ImageIcon,
   DownloadIcon,
   CreditCardIcon,
+  ChevronDownIcon,
 } from "lucide-react"
 import { toast } from "sonner"
 
@@ -50,6 +51,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
 import { MethodBadge, StatusBadge, Amount } from "@/components/finance-badges"
 import { ReceiptPreviewDialog } from "@/components/transactions/receipt-preview-dialog"
@@ -200,6 +207,16 @@ export function TransactionDetailView() {
     await updateLinkedPayerInStore(txId, payerId)
   }
 
+  /** Choisir un payeur déjà existant dans le menu (voir DropdownMenu ci-dessous) : lie directement
+   * son id, sans repasser par findOrCreatePayerByName — évite tout risque de doublon par variation
+   * de casse/espaces, et remplace le menu déroulant natif <datalist>, dont la liste ne défilait pas
+   * correctement une fois longue. */
+  async function selectExistingPayer(payer: (typeof payers)[number]) {
+    const name = `${payer.firstName} ${payer.lastName}`.trim()
+    await updateMemberInStore(txId, name || null)
+    await updateLinkedPayerInStore(txId, payer.id)
+  }
+
   return (
     <div className="mx-auto flex w-full max-w-4xl flex-col gap-6">
       <Button
@@ -307,24 +324,45 @@ export function TransactionDetailView() {
             </MetaRow>
             <Separator />
             <MetaRow icon={UserIcon} label={t.transactionDetail.linkedMember}>
-              <Input
-                key={`${tx.id}-${tx.member ?? ""}`}
-                list="linked-payer-suggestions"
-                defaultValue={tx.member ?? ""}
-                placeholder={t.transactionDetail.none}
-                className="h-7 w-44 border-transparent bg-transparent px-2 text-right text-sm font-medium hover:border-input"
-                onBlur={(e) => {
-                  const value = e.target.value.trim()
-                  if (value !== (tx.member ?? "")) {
-                    updateMemberAndLinkPayer(value)
-                  }
-                }}
-              />
-              <datalist id="linked-payer-suggestions">
-                {payers.map((p) => (
-                  <option key={p.id} value={`${p.firstName} ${p.lastName}`.trim()} />
-                ))}
-              </datalist>
+              <div className="flex items-center gap-0.5">
+                <Input
+                  key={`${tx.id}-${tx.member ?? ""}`}
+                  defaultValue={tx.member ?? ""}
+                  placeholder={t.transactionDetail.none}
+                  className="h-7 w-36 border-transparent bg-transparent px-2 text-right text-sm font-medium hover:border-input"
+                  onBlur={(e) => {
+                    const value = e.target.value.trim()
+                    if (value !== (tx.member ?? "")) {
+                      updateMemberAndLinkPayer(value)
+                    }
+                  }}
+                />
+                <DropdownMenu>
+                  <DropdownMenuTrigger
+                    render={
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        className="h-7 w-6"
+                        aria-label={t.transactionDetail.pickExistingPayer}
+                      />
+                    }
+                  >
+                    <ChevronDownIcon className="size-3.5" />
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="max-h-64">
+                    {payers.length === 0 ? (
+                      <DropdownMenuItem disabled>{t.transactionDetail.none}</DropdownMenuItem>
+                    ) : (
+                      payers.map((p) => (
+                        <DropdownMenuItem key={p.id} onClick={() => selectExistingPayer(p)}>
+                          {`${p.firstName} ${p.lastName}`.trim()}
+                        </DropdownMenuItem>
+                      ))
+                    )}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
             </MetaRow>
             <Separator />
             <MetaRow icon={UserIcon} label={t.transactionDetail.linkedAdherentLabel}>

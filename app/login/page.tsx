@@ -161,20 +161,30 @@ function SetupCard({
   )
 }
 
+/** Dernier e-mail utilisé pour se connecter — mémorisé pour éviter de le ressaisir après une
+ * déconnexion, le mot de passe restant lui toujours à retaper (voir handleSubmit ci-dessous). */
+const LAST_LOGIN_EMAIL_KEY = "klubo:last-login-email"
+
 function LoginCard({
   onLogin,
 }: {
   onLogin: (email: string, password: string) => Promise<boolean>
 }) {
   const { t } = useTranslation()
-  const [email, setEmail] = useState("")
+  const [email, setEmail] = useState(() =>
+    typeof window !== "undefined" ? window.localStorage.getItem(LAST_LOGIN_EMAIL_KEY) ?? "" : "",
+  )
   const [password, setPassword] = useState("")
   const [error, setError] = useState(false)
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     const ok = await onLogin(email, password)
-    if (!ok) setError(true)
+    if (!ok) {
+      setError(true)
+      return
+    }
+    window.localStorage.setItem(LAST_LOGIN_EMAIL_KEY, email)
   }
 
   return (
