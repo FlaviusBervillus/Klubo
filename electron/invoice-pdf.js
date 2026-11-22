@@ -15,6 +15,10 @@ function formatEuro(amount) {
   }).format(amount)
 }
 
+function formatQty(n) {
+  return new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 2 }).format(n)
+}
+
 function formatLongDate(isoDate) {
   const formatted = new Intl.DateTimeFormat("fr-FR", {
     day: "numeric",
@@ -93,6 +97,13 @@ function renderInvoiceHtml(tx, club, client) {
     ? club.address.split(",").map((part) => part.trim()).filter(Boolean)
     : []
   const { originalGross, refunded } = refundInfo(tx)
+  // Quantité/prix unitaire modifiables (voir ReceiptOverrides côté UI, ex. 0,5 jour de stage à 40 €
+  // tarif extérieur ou 5 € tarif club) — par défaut 1 × le montant réel, pour ne rien changer au
+  // comportement existant. Ce total documenté sur la facture est indépendant de tx.amount (montant
+  // réellement encaissé, utilisé lui pour les statistiques/exports).
+  const qty = tx.invoice_qty != null ? Number(tx.invoice_qty) : 1
+  const unitPrice = tx.invoice_unit_price != null ? Number(tx.invoice_unit_price) : originalGross
+  const lineAmount = qty * unitPrice
 
   return `<!DOCTYPE html>
 <html>
@@ -169,18 +180,18 @@ function renderInvoiceHtml(tx, club, client) {
       <tr>
         <td>${escapeHtml(client?.status || tx.category || "Non catégorisé")}</td>
         <td>${escapeHtml(tx.description)}</td>
-        <td class="num">1</td>
-        <td class="num">${formatEuro(originalGross)}</td>
-        <td class="num">${formatEuro(originalGross)}</td>
+        <td class="num">${formatQty(qty)}</td>
+        <td class="num">${formatEuro(unitPrice)}</td>
+        <td class="num">${formatEuro(lineAmount)}</td>
       </tr>
     </tbody>
   </table>
 
   <div class="totals">
-    <div><span>Sous-total</span><span>${formatEuro(originalGross)}</span></div>
+    <div><span>Sous-total</span><span>${formatEuro(lineAmount)}</span></div>
     ${refunded > 0 ? `<div><span>Remboursement</span><span>− ${formatEuro(refunded)}</span></div>` : ""}
-    <div><span>Total</span><span>${formatEuro(tx.amount)}</span></div>
-    <div class="paid"><span>Montant payé</span><span>${formatEuro(tx.amount)}</span></div>
+    <div><span>Total</span><span>${formatEuro(lineAmount - refunded)}</span></div>
+    <div class="paid"><span>Montant payé</span><span>${formatEuro(lineAmount - refunded)}</span></div>
   </div>
 
   ${

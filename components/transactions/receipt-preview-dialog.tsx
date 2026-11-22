@@ -28,7 +28,7 @@ import { useTransactionsStore } from "@/lib/transactions-store"
 import { useTranslation } from "@/lib/i18n/context"
 import type { ReceiptOverrides } from "@/types/electron"
 
-const emptyForm = { firstName: "", lastName: "", email: "", address: "" }
+const emptyForm = { firstName: "", lastName: "", email: "", address: "", qty: "1", unitPrice: "" }
 const ZOOM_STEP = 0.25
 const ZOOM_MIN = 0.5
 const ZOOM_MAX = 2
@@ -57,6 +57,23 @@ interface ReceiptPreviewDialogProps {
   /** Quand fourni (et transactionId null), génère une facture virtuelle à 0 € au lieu de documenter
    * un paiement existant — voir VirtualReceipt. */
   virtual?: VirtualReceipt | null
+}
+
+/** Construit les overrides envoyés à Electron à partir du formulaire — qty/unitPrice restent des
+ * chaînes côté formulaire (saisie libre), converties ici en nombres (1 et le montant réel par
+ * défaut si le champ est vide/invalide, pour ne jamais casser la génération du PDF). */
+function buildOverrides(selectedClientId: string, form: typeof emptyForm): ReceiptOverrides {
+  const qty = parseFloat(form.qty.replace(",", "."))
+  const unitPrice = parseFloat(form.unitPrice.replace(",", "."))
+  return {
+    payerId: selectedClientId || null,
+    firstName: form.firstName,
+    lastName: form.lastName,
+    email: form.email,
+    address: form.address,
+    invoiceQty: Number.isFinite(qty) ? qty : null,
+    invoiceUnitPrice: Number.isFinite(unitPrice) ? unitPrice : null,
+  }
 }
 
 export function ReceiptPreviewDialog({
@@ -90,6 +107,8 @@ export function ReceiptPreviewDialog({
         lastName: virtual.lastName,
         email: virtual.email,
         address: virtual.address,
+        qty: "1",
+        unitPrice: "0",
       })
       setStripeInvoicePdfUrl(null)
       setZoom(1)
@@ -122,6 +141,8 @@ export function ReceiptPreviewDialog({
           lastName: result.client?.last_name ?? "",
           email: result.client?.email ?? "",
           address: result.client?.address ?? "",
+          qty: "1",
+          unitPrice: String(result.tx.amount),
         })
         setStripeInvoicePdfUrl(result.stripeInvoicePdfUrl ?? null)
         // Le premier aperçu attribue définitivement le numéro de facture (voir
@@ -152,7 +173,7 @@ export function ReceiptPreviewDialog({
         if (!cancelled && result.ok) setHtml(result.html)
         return
       }
-      const overrides: ReceiptOverrides = { payerId: selectedClientId || null, ...form }
+      const overrides = buildOverrides(selectedClientId, form)
       const result = await electronApi.renderReceiptPreview(transactionId as string, overrides, forcedClientId)
       if (!cancelled && result.ok) setHtml(result.html)
     }
@@ -166,7 +187,7 @@ export function ReceiptPreviewDialog({
     setSelectedClientId(id)
     const p = payers.find((pl) => pl.id === id)
     if (p) {
-      setForm({ firstName: p.firstName, lastName: p.lastName, email: p.email, address: p.address })
+      setForm((f) => ({ ...f, firstName: p.firstName, lastName: p.lastName, email: p.email, address: p.address }))
     }
   }
 
@@ -197,7 +218,7 @@ export function ReceiptPreviewDialog({
       }
       return
     }
-    const overrides: ReceiptOverrides = { payerId: selectedClientId || null, ...form }
+    const overrides = buildOverrides(selectedClientId, form)
     const result = await electronApi.downloadReceipt(transactionId as string, overrides, forcedClientId)
     setBusy(false)
     if (result.ok) {
@@ -296,6 +317,26 @@ export function ReceiptPreviewDialog({
                   onChange={(e) => setForm((f) => ({ ...f, address: e.target.value }))}
                 />
               </Field>
+              <div className="grid grid-cols-2 gap-3">
+                <Field>
+                  <FieldLabel htmlFor="receipt-qty">{t.receiptPreview.qty}</FieldLabel>
+                  <Input
+                    id="receipt-qty"
+                    inputMode="decimal"
+                    value={form.qty}
+                    onChange={(e) => setForm((f) => ({ ...f, qty: e.target.value }))}
+                  />
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor="receipt-unit-price">{t.receiptPreview.unitPrice}</FieldLabel>
+                  <Input
+                    id="receipt-unit-price"
+                    inputMode="decimal"
+                    value={form.unitPrice}
+                    onChange={(e) => setForm((f) => ({ ...f, unitPrice: e.target.value }))}
+                  />
+                </Field>
+              </div>
             </FieldGroup>
 
             <div className="flex flex-col gap-2">

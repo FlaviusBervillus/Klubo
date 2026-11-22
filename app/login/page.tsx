@@ -11,6 +11,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
+import { Checkbox } from "@/components/ui/checkbox"
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { ForgotPasswordDialog } from "@/components/account/forgot-password-dialog"
@@ -176,6 +177,8 @@ function LoginCard({
   )
   const [password, setPassword] = useState("")
   const [error, setError] = useState(false)
+  // Coché par défaut — le mot de passe, lui, n'est jamais mémorisé quel que soit ce choix.
+  const [rememberEmail, setRememberEmail] = useState(true)
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -184,7 +187,11 @@ function LoginCard({
       setError(true)
       return
     }
-    window.localStorage.setItem(LAST_LOGIN_EMAIL_KEY, email)
+    if (rememberEmail) {
+      window.localStorage.setItem(LAST_LOGIN_EMAIL_KEY, email)
+    } else {
+      window.localStorage.removeItem(LAST_LOGIN_EMAIL_KEY)
+    }
   }
 
   return (
@@ -229,6 +236,17 @@ function LoginCard({
                 }}
               />
             </Field>
+
+            <div className="flex items-center gap-2">
+              <Checkbox
+                id="login-remember-email"
+                checked={rememberEmail}
+                onCheckedChange={setRememberEmail}
+              />
+              <FieldLabel htmlFor="login-remember-email" className="font-normal">
+                {t.login.rememberEmail}
+              </FieldLabel>
+            </div>
 
             {error ? (
               <p className="text-sm text-destructive">

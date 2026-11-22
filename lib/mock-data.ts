@@ -1,4 +1,7 @@
-export type PaymentMethod = "stripe" | "especes" | "cheque" | "virement"
+/** Les 4 méthodes de base restent typées pour les libellés/styles connus, mais la colonne SQLite
+ * `method` est un simple TEXT libre (electron/db.js) : le trésorier peut saisir n'importe quelle
+ * autre valeur à la main (voir ALL_PAYMENT_METHODS et son usage en suggestions). */
+export type PaymentMethod = "stripe" | "especes" | "cheque" | "virement" | (string & {})
 export type TransactionType = "entree" | "sortie"
 export type TransactionStatus =
   | "valide"

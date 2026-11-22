@@ -3,7 +3,7 @@ import { Badge } from "@/components/ui/badge"
 import { useTranslation } from "@/lib/i18n/context"
 import { type PaymentMethod, type TransactionStatus } from "@/lib/mock-data"
 
-const methodStyles: Record<PaymentMethod, string> = {
+const methodStyles: Partial<Record<PaymentMethod, string>> = {
   stripe:
     "border-transparent bg-[oklch(0.55_0.13_265)]/12 text-[oklch(0.5_0.15_265)] dark:text-[oklch(0.75_0.12_265)]",
   especes:
@@ -13,12 +13,17 @@ const methodStyles: Record<PaymentMethod, string> = {
   virement:
     "border-transparent bg-warning/15 text-[oklch(0.5_0.12_60)] dark:text-[oklch(0.8_0.13_65)]",
 }
+// Style neutre pour une méthode saisie librement par le trésorier (hors des 4 méthodes de base).
+const CUSTOM_METHOD_STYLE = "border-transparent bg-muted text-muted-foreground"
 
 export function MethodBadge({ method }: { method: PaymentMethod }) {
   const { t } = useTranslation()
   return (
-    <Badge variant="outline" className={cn("font-medium", methodStyles[method])}>
-      {t.methods[method]}
+    <Badge
+      variant="outline"
+      className={cn("font-medium", methodStyles[method] ?? CUSTOM_METHOD_STYLE)}
+    >
+      {t.methods[method] ?? method}
     </Badge>
   )
 }

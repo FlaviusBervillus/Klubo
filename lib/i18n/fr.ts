@@ -76,6 +76,7 @@ export const fr: Dictionary = {
     subtitle: "Accédez à la comptabilité du club.",
     email: "Adresse e-mail",
     password: "Mot de passe",
+    rememberEmail: "Se souvenir de mon adresse e-mail",
     submit: "Se connecter",
     invalidCredentials: "E-mail ou mot de passe incorrect.",
     demoHint: "Comptes de démonstration : tresorier / secretaire / president / admin (mot de passe = identique au rôle).",
@@ -193,6 +194,8 @@ export const fr: Dictionary = {
     download: "Télécharger",
     zoomIn: "Zoom avant",
     zoomOut: "Zoom arrière",
+    qty: "Quantité",
+    unitPrice: "Prix unitaire",
   },
   transactionDetail: {
     pageTitle: "Détail transaction",

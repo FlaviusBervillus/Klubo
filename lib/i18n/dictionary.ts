@@ -48,6 +48,7 @@ export interface Dictionary {
     subtitle: string
     email: string
     password: string
+    rememberEmail: string
     submit: string
     invalidCredentials: string
     demoHint: string
@@ -164,6 +165,8 @@ export interface Dictionary {
     download: string
     zoomIn: string
     zoomOut: string
+    qty: string
+    unitPrice: string
   }
   transactionDetail: {
     pageTitle: string

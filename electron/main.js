@@ -459,7 +459,12 @@ ipcMain.handle("receipts:render-preview", (_e, transactionId, overrides, forcedC
     if (!tx) return { ok: false, error: "Transaction introuvable" }
     const invoiceNumber = db.getOrAssignInvoiceNumber(tx.id)
     const txForInvoice = applyDescriptionSuffix(
-      { ...tx, invoice_number: invoiceNumber },
+      {
+        ...tx,
+        invoice_number: invoiceNumber,
+        invoice_qty: overrides?.invoiceQty ?? null,
+        invoice_unit_price: overrides?.invoiceUnitPrice ?? null,
+      },
       computeDescriptionSuffix(tx, forcedClientId),
     )
     const html = renderInvoiceHtml(txForInvoice, getClubSettings(), resolveClient(tx, overrides, forcedClientId))
@@ -475,7 +480,12 @@ ipcMain.handle("receipts:download", async (_e, transactionId, overrides, forcedC
     if (!tx) return { ok: false, error: "Transaction introuvable" }
     const invoiceNumber = db.getOrAssignInvoiceNumber(tx.id)
     const txForInvoice = applyDescriptionSuffix(
-      { ...tx, invoice_number: invoiceNumber },
+      {
+        ...tx,
+        invoice_number: invoiceNumber,
+        invoice_qty: overrides?.invoiceQty ?? null,
+        invoice_unit_price: overrides?.invoiceUnitPrice ?? null,
+      },
       computeDescriptionSuffix(tx, forcedClientId),
     )
     let client = resolveClient(tx, overrides, forcedClientId)

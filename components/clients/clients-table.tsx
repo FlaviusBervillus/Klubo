@@ -16,6 +16,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
+import { Input } from "@/components/ui/input"
 import {
   InputGroup,
   InputGroupAddon,
@@ -124,7 +125,15 @@ export function ClientsTable() {
     { value: "unpaid", label: t.clients.unpaid },
   ]
 
-  const methodItems = ALL_PAYMENT_METHODS.map((m) => ({ value: m, label: t.methods[m] }))
+  /** Méthodes proposées en saisie libre : les méthodes de base + toutes celles déjà saisies à la
+   * main par le trésorier sur un autre adhérent, pour ne jamais avoir à les retaper. */
+  const methodSuggestions = useMemo(() => {
+    const set = new Set<string>(ALL_PAYMENT_METHODS)
+    for (const c of clients) {
+      if (c.method) set.add(c.method)
+    }
+    return Array.from(set)
+  }, [clients])
 
   const filtered = useMemo(() => {
     return clients.filter((c) => {
@@ -157,8 +166,8 @@ export function ClientsTable() {
     toast.success(paid ? t.clients.markedPaid : t.clients.markedUnpaid)
   }
 
-  async function setMethod(clientId: string, method: PaymentMethod) {
-    await updateClient(clientId, { method })
+  async function setMethod(clientId: string, method: string) {
+    await updateClient(clientId, { method: method as PaymentMethod })
   }
 
   /** La facture documente un règlement : on ne peut en générer une que pour une transaction
@@ -233,6 +242,11 @@ export function ClientsTable() {
 
   return (
     <div className="flex flex-col gap-4">
+      <datalist id="payment-method-suggestions">
+        {methodSuggestions.map((m) => (
+          <option key={m} value={m} label={t.methods[m as PaymentMethod] ?? m} />
+        ))}
+      </datalist>
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
         <InputGroup className="lg:max-w-xs">
           <InputGroupAddon>
@@ -344,27 +358,19 @@ export function ClientsTable() {
                     </Badge>
                   </TableCell>
                   <TableCell>
-                    {c.status === UNCATEGORIZED_COURSE ? (
+                    {c.status === UNCATEGORIZED_COURSE || !c.paid ? (
                       <span className="text-muted-foreground">—</span>
                     ) : (
-                      <Select
-                        items={methodItems}
-                        value={c.method}
-                        onValueChange={(v) => v && setMethod(c.id, v as PaymentMethod)}
-                      >
-                        <SelectTrigger size="sm" className="w-auto min-w-28">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectGroup>
-                            {ALL_PAYMENT_METHODS.map((m) => (
-                              <SelectItem key={m} value={m}>
-                                {t.methods[m]}
-                              </SelectItem>
-                            ))}
-                          </SelectGroup>
-                        </SelectContent>
-                      </Select>
+                      <Input
+                        key={`${c.id}-${c.method}`}
+                        defaultValue={c.method}
+                        list="payment-method-suggestions"
+                        className="h-7 w-28 text-sm"
+                        onBlur={(e) => {
+                          const value = e.target.value.trim()
+                          if (value && value !== c.method) setMethod(c.id, value)
+                        }}
+                      />
                     )}
                   </TableCell>
                   <TableCell>

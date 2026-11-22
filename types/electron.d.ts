@@ -14,6 +14,11 @@ export interface ReceiptOverrides {
   lastName: string
   email: string
   address: string
+  /** Quantité et prix unitaire affichés sur la ligne de la facture — modifiables pour les stages
+   * (ex. 0,5 jour à 40 € tarif extérieur ou 5 € tarif club), indépendamment du montant réellement
+   * encaissé (tx.amount), qui reste inchangé pour la comptabilité. */
+  invoiceQty?: number | null
+  invoiceUnitPrice?: number | null
 }
 
 export interface VirtualReceiptOverrides {
