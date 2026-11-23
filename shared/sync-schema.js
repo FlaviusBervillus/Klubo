@@ -369,7 +369,15 @@ function migrate(db) {
   // sync_meta, qui ne font pas partie de SYNC_TABLES et restent locales par construction).
   for (const table of SYNC_TABLES) {
     ensureColumn(db, table, "sync_version", "sync_version INTEGER NOT NULL DEFAULT 1")
-    ensureColumn(db, table, "updated_at", "updated_at TEXT NOT NULL DEFAULT (datetime('now'))")
+    // node:sqlite refuse un DEFAULT non constant sur ALTER TABLE ADD COLUMN (contrairement au CLI
+    // sqlite3) : "Cannot add a column with non-constant default" pour DEFAULT (datetime('now')) ou
+    // même DEFAULT CURRENT_TIMESTAMP. On pose donc une valeur par défaut constante, puis on
+    // rattrape l'horodatage réel juste après — uniquement sur les lignes qui viennent de recevoir
+    // la colonne (chaîne vide), jamais sur un updated_at déjà renseigné par un cycle précédent.
+    const addedUpdatedAt = ensureColumn(db, table, "updated_at", "updated_at TEXT NOT NULL DEFAULT ''")
+    if (addedUpdatedAt) {
+      db.exec(`UPDATE ${table} SET updated_at = datetime('now') WHERE updated_at = ''`)
+    }
     ensureColumn(db, table, "deleted_at", "deleted_at TEXT")
   }
 
@@ -552,12 +560,17 @@ function migrateSeasonMembershipBackfill(db) {
   db.prepare("INSERT INTO settings (key, value) VALUES ('seasonMembershipMigrated', '1')").run()
 }
 
-/** Ajoute une colonne à une table existante si elle n'y est pas déjà (les CREATE TABLE IF NOT EXISTS ci-dessus ne touchent pas les tables déjà créées lors d'une version antérieure). */
+/** Ajoute une colonne à une table existante si elle n'y est pas déjà (les CREATE TABLE IF NOT EXISTS
+ * ci-dessus ne touchent pas les tables déjà créées lors d'une version antérieure). Renvoie `true` si
+ * la colonne vient d'être ajoutée (pour permettre un rattrapage ponctuel, ex. backfill), `false` si
+ * elle existait déjà. */
 function ensureColumn(database, table, column, columnDdl) {
   const columns = database.prepare(`PRAGMA table_info(${table})`).all()
   if (!columns.some((c) => c.name === column)) {
     database.exec(`ALTER TABLE ${table} ADD COLUMN ${columnDdl}`)
+    return true
   }
+  return false
 }
 
 module.exports = { migrate, ensureColumn, SYNC_TABLES, TABLE_PRIMARY_KEYS, rowIdFromRow, pkValuesFromRowId }

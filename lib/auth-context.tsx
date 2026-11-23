@@ -64,8 +64,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
       const electronApi = api()
       if (electronApi) {
-        const count = await electronApi.db.countUsers()
-        setNeedsSetup(count === 0)
+        try {
+          const count = await electronApi.db.countUsers()
+          setNeedsSetup(count === 0)
+        } catch (err) {
+          // Une erreur ici (ex. migration SQLite en échec) ne doit jamais bloquer l'app sur l'écran
+          // de chargement indéfiniment : on la journalise et on laisse l'utilisateur voir l'écran de
+          // connexion plutôt qu'un écran figé sans aucun indice.
+          console.error("Échec de l'initialisation de la base locale :", err)
+        }
       }
       setLoaded(true)
     }
