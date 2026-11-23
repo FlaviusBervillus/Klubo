@@ -1356,12 +1356,16 @@ function applyRemoteDelete(table, rowId, version) {
 
 /** File d'attente des conflits détectés (même ligne modifiée des deux côtés depuis le dernier point
  * de sync commun) — jamais résolus automatiquement, voir components/parametres/sync-conflict-dialog. */
-function addConflict({ table, rowId, localPayload, remotePayload }) {
+/** `remoteVersion` est la version serveur AUTHORITATIVE au moment du conflit (ex. `result.serverVersion`
+ * reçu d'un push refusé, ou `version` d'un changement tiré au pull) — distincte de `remotePayload.sync_version`
+ * car un payload `null` (le serveur n'a pas cette ligne) ne permet pas de retrouver cette version
+ * autrement, et resolveConflictKeepLocal/Remote en ont besoin pour rebaser correctement le curseur. */
+function addConflict({ table, rowId, localPayload, remotePayload, remoteVersion }) {
   const id = crypto.randomUUID()
   getDb()
     .prepare(
-      `INSERT INTO sync_conflicts (id, table_name, row_id, local_payload_json, remote_payload_json, detected_at)
-       VALUES (@id, @table, @rowId, @localPayloadJson, @remotePayloadJson, datetime('now'))`,
+      `INSERT INTO sync_conflicts (id, table_name, row_id, local_payload_json, remote_payload_json, remote_version, detected_at)
+       VALUES (@id, @table, @rowId, @localPayloadJson, @remotePayloadJson, @remoteVersion, datetime('now'))`,
     )
     .run({
       id,
@@ -1369,6 +1373,7 @@ function addConflict({ table, rowId, localPayload, remotePayload }) {
       rowId,
       localPayloadJson: JSON.stringify(localPayload),
       remotePayloadJson: JSON.stringify(remotePayload),
+      remoteVersion: remoteVersion ?? null,
     })
   return id
 }
@@ -1380,6 +1385,7 @@ function parseConflictRow(r) {
     rowId: r.row_id,
     localPayload: JSON.parse(r.local_payload_json),
     remotePayload: JSON.parse(r.remote_payload_json),
+    remoteVersion: r.remote_version,
     detectedAt: r.detected_at,
   }
 }
@@ -1398,11 +1404,17 @@ function getConflictById(id) {
 
 /** "Garder la version locale" : rien à écrire sur la table (la ligne locale porte déjà l'édition
  * voulue) — on avance juste le curseur local jusqu'à la version distante qui causait le conflit,
- * pour que le prochain push reparte avec le bon `baseVersion` et s'applique proprement. */
+ * pour que le prochain push reparte avec le bon `baseVersion` et s'applique proprement. Utilise
+ * `remote_version` (capturé au moment du conflit, voir addConflict) plutôt que
+ * `remotePayload?.sync_version` : quand remotePayload est NULL (le serveur n'a pas cette ligne, ex.
+ * après un vidage du NAS), ce dernier vaudrait toujours undefined et on retomberait sur l'ancienne
+ * valeur fautive de getRowSyncedVersion — exactement la valeur qui a causé le conflit — faisant
+ * réapparaître le même conflit au prochain push au lieu de le résoudre.
+ */
 function resolveConflictKeepLocal(id) {
   const conflict = getConflictById(id)
   if (!conflict) return
-  const remoteVersion = conflict.remotePayload?.sync_version ?? getRowSyncedVersion(conflict.table, conflict.rowId)
+  const remoteVersion = conflict.remoteVersion ?? getRowSyncedVersion(conflict.table, conflict.rowId)
   setRowSyncedVersion(conflict.table, conflict.rowId, remoteVersion)
   getDb().prepare("UPDATE sync_conflicts SET resolved_at = datetime('now') WHERE id = ?").run(id)
 }
@@ -1415,7 +1427,7 @@ function resolveConflictKeepLocal(id) {
 function resolveConflictKeepRemote(id) {
   const conflict = getConflictById(id)
   if (!conflict) return
-  const remoteVersion = conflict.remotePayload?.sync_version ?? getRowSyncedVersion(conflict.table, conflict.rowId)
+  const remoteVersion = conflict.remoteVersion ?? getRowSyncedVersion(conflict.table, conflict.rowId)
   if (conflict.remotePayload) {
     applyRemoteUpsert(conflict.table, conflict.rowId, conflict.remotePayload)
   } else {

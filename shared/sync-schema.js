@@ -363,6 +363,13 @@ function migrate(db) {
   ensureColumn(db, "quotes", "validity_text", "validity_text TEXT NOT NULL DEFAULT ''")
   // Double authentification (TOTP) pour la récupération de mot de passe — voir lib/crypto/totp.ts.
   ensureColumn(db, "users", "totp_secret", "totp_secret TEXT")
+  // Version serveur au moment du conflit — indispensable pour rebaser correctement le curseur de
+  // sync lors de la résolution (voir resolveConflictKeepLocal/Remote dans electron/db.js) : quand
+  // remote_payload_json est NULL (le serveur n'a tout simplement pas cette ligne, ex. après un
+  // vidage du NAS), il n'y a aucun payload dont extraire sync_version, donc sans cette colonne la
+  // résolution "Garder la version locale" retombe sur l'ancienne valeur fautive et le conflit
+  // réapparaît identique au prochain push.
+  ensureColumn(db, "sync_conflicts", "remote_version", "remote_version INTEGER")
 
   // Sync NAS : version optimiste, horodatage de dernière écriture, tombstone de suppression douce —
   // sur chaque table métier synchronisée (jamais sur sync_changes/sync_row_state/sync_conflicts/

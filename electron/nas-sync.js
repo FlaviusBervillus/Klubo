@@ -100,6 +100,7 @@ async function pull(serverUrl, apiKey, deviceId) {
           rowId,
           localPayload: db.getRowPayloadByRowId(table, rowId),
           remotePayload: payload,
+          remoteVersion: version,
         })
       }
     }
@@ -138,6 +139,7 @@ async function push(serverUrl, apiKey, deviceId) {
         rowId,
         localPayload: payload ?? db.getRowPayloadByRowId(table, rowId),
         remotePayload: result.serverPayload,
+        remoteVersion: result.serverVersion,
       })
     }
   }
