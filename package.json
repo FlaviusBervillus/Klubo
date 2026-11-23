@@ -50,6 +50,7 @@
     "productName": "Klubo",
     "files": [
       "electron/**/*",
+      "shared/**/*",
       "scripts/**/*",
       "out/**/*",
       "build/icon.png",
