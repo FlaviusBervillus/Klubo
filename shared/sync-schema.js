@@ -390,6 +390,17 @@ function migrate(db) {
     })
   }
 
+}
+
+/** Rattrapages réservés au poste Electron (jamais au serveur de sync NAS, voir runClientBackfills
+ * ci-dessous) : ils donnent un sens à des données locales préexistantes (anciennes disciplines
+ * codées en dur, anciens tuteurs, etc.). Le serveur NAS démarre toujours avec une base vide — s'il
+ * exécutait ces mêmes rattrapages, il se mettrait à fabriquer ses PROPRES lignes par défaut (ex. les
+ * mêmes disciplines "Kung-fu Adulte"... avec un id différent de celui du client), et le premier push
+ * d'un poste échouerait alors sur une contrainte UNIQUE (ex. disciplines.label) en percutant ces
+ * lignes fantômes. C'est exactement le bug observé : le serveur avait lui-même généré ses
+ * disciplines par défaut avant que le client ne pousse les siennes. */
+function runClientBackfills(db) {
   migrateSeasonMembershipBackfill(db)
   migrateDisciplinesBackfill(db)
   migratePayersBackfill(db)
@@ -573,4 +584,12 @@ function ensureColumn(database, table, column, columnDdl) {
   return false
 }
 
-module.exports = { migrate, ensureColumn, SYNC_TABLES, TABLE_PRIMARY_KEYS, rowIdFromRow, pkValuesFromRowId }
+module.exports = {
+  migrate,
+  runClientBackfills,
+  ensureColumn,
+  SYNC_TABLES,
+  TABLE_PRIMARY_KEYS,
+  rowIdFromRow,
+  pkValuesFromRowId,
+}

@@ -2,7 +2,7 @@ const path = require("path")
 const crypto = require("crypto")
 const { app } = require("electron")
 const { DatabaseSync } = require("node:sqlite")
-const { migrate, TABLE_PRIMARY_KEYS, pkValuesFromRowId } = require("../shared/sync-schema")
+const { migrate, runClientBackfills, TABLE_PRIMARY_KEYS, pkValuesFromRowId } = require("../shared/sync-schema")
 
 let db = null
 let cachedDeviceId = null
@@ -19,6 +19,9 @@ function getDb() {
   db.exec("PRAGMA journal_mode = WAL")
   db.exec("PRAGMA foreign_keys = ON")
   migrate(db)
+  // Réservé au poste Electron (jamais au serveur de sync NAS, qui démarre toujours avec une base
+  // vide) : voir le commentaire sur runClientBackfills dans shared/sync-schema.js.
+  runClientBackfills(db)
   return db
 }
 
