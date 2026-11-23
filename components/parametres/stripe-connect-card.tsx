@@ -26,7 +26,7 @@ function api() {
   return typeof window !== "undefined" ? window.electronAPI : undefined
 }
 
-export function StripeConnectCard() {
+export function StripeConnectCard({ canEdit }: { canEdit: boolean }) {
   const { t } = useTranslation()
   const fields = [
     {
@@ -161,37 +161,41 @@ export function StripeConnectCard() {
           )}
         </Row>
 
-        <div className="mt-1 flex flex-col gap-2 sm:flex-row">
-          <ApiCredentialsDialog
-            title={t.settings.stripeKeysDialogTitle}
-            description={t.settings.stripeKeysDialogDescription}
-            fields={fields}
-            values={data}
-            onSave={setSecret}
-            trigger={
-              <Button variant="outline" className="flex-1">
-                {t.settings.configureKeys}
+        {canEdit ? (
+          <>
+            <div className="mt-1 flex flex-col gap-2 sm:flex-row">
+              <ApiCredentialsDialog
+                title={t.settings.stripeKeysDialogTitle}
+                description={t.settings.stripeKeysDialogDescription}
+                fields={fields}
+                values={data}
+                onSave={setSecret}
+                trigger={
+                  <Button variant="outline" className="flex-1">
+                    {t.settings.configureKeys}
+                  </Button>
+                }
+              />
+              <Button
+                variant="outline"
+                className="flex-1"
+                onClick={testConnection}
+                disabled={testing}
+              >
+                {t.settings.testConnection}
               </Button>
-            }
-          />
-          <Button
-            variant="outline"
-            className="flex-1"
-            onClick={testConnection}
-            disabled={testing}
-          >
-            {t.settings.testConnection}
-          </Button>
-        </div>
-        <Button
-          variant="outline"
-          className="w-full"
-          onClick={syncStripe}
-          disabled={syncing}
-        >
-          <RefreshCwIcon data-icon="inline-start" />
-          {syncing ? t.settings.syncing : t.settings.syncStripe}
-        </Button>
+            </div>
+            <Button
+              variant="outline"
+              className="w-full"
+              onClick={syncStripe}
+              disabled={syncing}
+            >
+              <RefreshCwIcon data-icon="inline-start" />
+              {syncing ? t.settings.syncing : t.settings.syncStripe}
+            </Button>
+          </>
+        ) : null}
       </CardContent>
     </Card>
   )

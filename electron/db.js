@@ -2,8 +2,10 @@ const path = require("path")
 const crypto = require("crypto")
 const { app } = require("electron")
 const { DatabaseSync } = require("node:sqlite")
+const { migrate, TABLE_PRIMARY_KEYS, pkValuesFromRowId } = require("../shared/sync-schema")
 
 let db = null
+let cachedDeviceId = null
 
 /**
  * node:sqlite (intégré à Node depuis la 22.5, embarqué par Electron ≥ 34)
@@ -20,383 +22,63 @@ function getDb() {
   return db
 }
 
-function migrate(db) {
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS users (
-      id TEXT PRIMARY KEY,
-      name TEXT NOT NULL,
-      email TEXT NOT NULL UNIQUE,
-      password_hash TEXT NOT NULL,
-      role TEXT NOT NULL,
-      security_question TEXT,
-      security_answer_hash TEXT,
-      created_at TEXT NOT NULL DEFAULT (datetime('now'))
-    );
-
-    CREATE TABLE IF NOT EXISTS clients (
-      id TEXT PRIMARY KEY,
-      stripe_customer_id TEXT UNIQUE,
-      first_name TEXT NOT NULL,
-      last_name TEXT NOT NULL,
-      email TEXT NOT NULL,
-      status TEXT NOT NULL,
-      method TEXT NOT NULL,
-      paid INTEGER NOT NULL DEFAULT 0,
-      created_at TEXT NOT NULL DEFAULT (datetime('now'))
-    );
-
-    CREATE TABLE IF NOT EXISTS transactions (
-      id TEXT PRIMARY KEY,
-      date TEXT NOT NULL,
-      description TEXT NOT NULL,
-      member TEXT,
-      method TEXT NOT NULL,
-      category TEXT,
-      type TEXT NOT NULL,
-      amount REAL NOT NULL,
-      status TEXT NOT NULL,
-      justificatif_type TEXT,
-      justificatif_name TEXT,
-      stripe_payment_intent_id TEXT,
-      stripe_charge_id TEXT,
-      stripe_fee REAL,
-      stripe_net REAL,
-      stripe_raw_json TEXT,
-      created_at TEXT NOT NULL DEFAULT (datetime('now'))
-    );
-
-    CREATE TABLE IF NOT EXISTS bank_transactions (
-      id TEXT PRIMARY KEY,
-      gocardless_account_id TEXT NOT NULL,
-      date TEXT NOT NULL,
-      description TEXT,
-      amount REAL NOT NULL,
-      raw_json TEXT,
-      created_at TEXT NOT NULL DEFAULT (datetime('now'))
-    );
-
-    CREATE TABLE IF NOT EXISTS settings (
-      key TEXT PRIMARY KEY,
-      value TEXT
-    );
-
-    CREATE TABLE IF NOT EXISTS vault (
-      id INTEGER PRIMARY KEY CHECK (id = 1),
-      salt_b64 TEXT NOT NULL,
-      iv_b64 TEXT NOT NULL,
-      ciphertext_b64 TEXT NOT NULL
-    );
-
-    CREATE TABLE IF NOT EXISTS sync_state (
-      provider TEXT PRIMARY KEY,
-      cursor TEXT,
-      last_synced_at TEXT
-    );
-
-    CREATE TABLE IF NOT EXISTS seasons (
-      id TEXT PRIMARY KEY,
-      label TEXT NOT NULL,
-      start_date TEXT NOT NULL,
-      end_date TEXT NOT NULL,
-      created_at TEXT NOT NULL DEFAULT (datetime('now'))
-    );
-
-    CREATE TABLE IF NOT EXISTS client_seasons (
-      client_id TEXT NOT NULL,
-      season_id TEXT NOT NULL,
-      status TEXT NOT NULL,
-      paid INTEGER NOT NULL DEFAULT 0,
-      PRIMARY KEY (client_id, season_id)
-    );
-
-    CREATE TABLE IF NOT EXISTS import_batches (
-      id TEXT PRIMARY KEY,
-      created_count INTEGER NOT NULL DEFAULT 0,
-      updated_count INTEGER NOT NULL DEFAULT 0,
-      skipped_count INTEGER NOT NULL DEFAULT 0,
-      undone INTEGER NOT NULL DEFAULT 0,
-      created_at TEXT NOT NULL DEFAULT (datetime('now'))
-    );
-
-    CREATE TABLE IF NOT EXISTS import_batch_changes (
-      id TEXT PRIMARY KEY,
-      batch_id TEXT NOT NULL,
-      client_id TEXT NOT NULL,
-      kind TEXT NOT NULL,
-      previous_json TEXT
-    );
-
-    CREATE TABLE IF NOT EXISTS fixed_assets (
-      id TEXT PRIMARY KEY,
-      label TEXT NOT NULL,
-      purchase_amount REAL NOT NULL,
-      purchase_date TEXT NOT NULL,
-      depreciation_years INTEGER NOT NULL,
-      disposed INTEGER NOT NULL DEFAULT 0,
-      notes TEXT NOT NULL DEFAULT '',
-      created_at TEXT NOT NULL DEFAULT (datetime('now'))
-    );
-
-    CREATE TABLE IF NOT EXISTS debts (
-      id TEXT PRIMARY KEY,
-      label TEXT NOT NULL,
-      amount REAL NOT NULL,
-      date TEXT NOT NULL,
-      due_date TEXT,
-      settled INTEGER NOT NULL DEFAULT 0,
-      notes TEXT NOT NULL DEFAULT '',
-      created_at TEXT NOT NULL DEFAULT (datetime('now'))
-    );
-
-    CREATE TABLE IF NOT EXISTS cotisation_prices (
-      course_type TEXT PRIMARY KEY,
-      price REAL NOT NULL
-    );
-
-    CREATE TABLE IF NOT EXISTS equipment_items (
-      id TEXT PRIMARY KEY,
-      label TEXT NOT NULL,
-      stock_quantity INTEGER NOT NULL DEFAULT 0,
-      purchase_price REAL NOT NULL DEFAULT 0,
-      sale_price REAL NOT NULL DEFAULT 0,
-      notes TEXT NOT NULL DEFAULT '',
-      created_at TEXT NOT NULL DEFAULT (datetime('now'))
-    );
-
-    CREATE TABLE IF NOT EXISTS disciplines (
-      id TEXT PRIMARY KEY,
-      label TEXT NOT NULL UNIQUE,
-      price REAL NOT NULL DEFAULT 0,
-      created_at TEXT NOT NULL DEFAULT (datetime('now'))
-    );
-
-    CREATE TABLE IF NOT EXISTS payers (
-      id TEXT PRIMARY KEY,
-      stripe_customer_id TEXT UNIQUE,
-      first_name TEXT NOT NULL DEFAULT '',
-      last_name TEXT NOT NULL DEFAULT '',
-      email TEXT NOT NULL DEFAULT '',
-      phone TEXT NOT NULL DEFAULT '',
-      address TEXT NOT NULL DEFAULT '',
-      postal_code TEXT NOT NULL DEFAULT '',
-      city TEXT NOT NULL DEFAULT '',
-      created_at TEXT NOT NULL DEFAULT (datetime('now'))
-    );
-
-    -- Devis : document librement rempli (pas rattaché à un adhérent/une transaction, contrairement
-    -- aux factures) — chaque champ est du texte libre que le trésorier remplit comme il l'entend,
-    -- voir electron/quote-pdf.js pour le rendu.
-    CREATE TABLE IF NOT EXISTS quotes (
-      id TEXT PRIMARY KEY,
-      number TEXT NOT NULL DEFAULT '',
-      date TEXT NOT NULL,
-      title TEXT NOT NULL DEFAULT 'DEVIS',
-      subtitle TEXT NOT NULL DEFAULT '',
-      season_label TEXT NOT NULL DEFAULT '',
-      emitter_lines TEXT NOT NULL DEFAULT '',
-      recipient_lines TEXT NOT NULL DEFAULT '',
-      info_title TEXT NOT NULL DEFAULT '',
-      info_text TEXT NOT NULL DEFAULT '',
-      prestation_title TEXT NOT NULL DEFAULT '',
-      prestation_text TEXT NOT NULL DEFAULT '',
-      items_json TEXT NOT NULL DEFAULT '[]',
-      terms_title TEXT NOT NULL DEFAULT '',
-      terms_text TEXT NOT NULL DEFAULT '',
-      validity_text TEXT NOT NULL DEFAULT '',
-      signature_left_label TEXT NOT NULL DEFAULT '',
-      signature_right_label TEXT NOT NULL DEFAULT '',
-      created_at TEXT NOT NULL DEFAULT (datetime('now'))
-    );
-  `)
-
-  ensureColumn(db, "clients", "address", "address TEXT NOT NULL DEFAULT ''")
-  ensureColumn(db, "clients", "phone", "phone TEXT NOT NULL DEFAULT ''")
-  ensureColumn(db, "clients", "birth_date", "birth_date TEXT")
-  ensureColumn(db, "clients", "postal_code", "postal_code TEXT NOT NULL DEFAULT ''")
-  ensureColumn(db, "clients", "city", "city TEXT NOT NULL DEFAULT ''")
-  // "guardian_id" n'est plus utilisé par le code (voir payer_id / migratePayersBackfill ci-dessous)
-  // mais la colonne reste en base — comme pour cotisation_prices, on ne DROP jamais une colonne qui
-  // contenait des données réelles, au cas où une ancienne sauvegarde/export y ferait encore référence.
-  ensureColumn(db, "clients", "guardian_id", "guardian_id TEXT")
-  ensureColumn(db, "clients", "payer_id", "payer_id TEXT")
-  // Nature du lien avec le payeur, choisie explicitement depuis la fiche payeur (voir
-  // components/payeurs/add-payer-dialog.tsx) plutôt que devinée par comparaison de noms :
-  // "self" = le payeur est cet adhérent lui-même (il règle sa propre cotisation), "child" = un
-  // enfant dont le payeur (parent) règle la cotisation. Détermine qui est facturé (voir
-  // resolveClientForInvoice dans electron/main.js).
-  ensureColumn(db, "clients", "payer_relationship", "payer_relationship TEXT")
-  // Rétro-compatibilité : les liens payer_id posés avant l'ajout de cette colonne n'ont pas encore
-  // de valeur — on la déduit une bonne fois par comparaison de noms (même nom que le payeur = lui-
-  // même, sinon un enfant), au lieu de reproduire cette heuristique à chaque lecture.
-  db.prepare(
-    `UPDATE clients SET payer_relationship = (
-       CASE WHEN EXISTS (
-         SELECT 1 FROM payers p
-         WHERE p.id = clients.payer_id
-           AND lower(trim(p.first_name || ' ' || p.last_name)) = lower(trim(clients.first_name || ' ' || clients.last_name))
-       ) THEN 'self' ELSE 'child' END
-     )
-     WHERE payer_id IS NOT NULL AND payer_relationship IS NULL`,
-  ).run()
-  // Membre du bureau (trésorier, président...) : non null = exonéré de cotisation, le texte sert de
-  // libellé de rôle imprimé sur la facture à 0 € générée pour lui (voir receipts:*-virtual).
-  ensureColumn(db, "clients", "board_role", "board_role TEXT")
-  // Adhérent explicitement associé à cette transaction (distinct de "member", qui reste le nom du
-  // PAYEUR tel qu'il apparaît sur le règlement) : utile quand un parent et son enfant sont tous les
-  // deux adhérents mais qu'un seul paie — la facture doit nommer l'enfant, pas le parent qui a réglé.
-  ensureColumn(db, "transactions", "linked_client_id", "linked_client_id TEXT")
-  // Payeur explicitement associé à cette transaction — utile quand Stripe ne fournit aucun nom
-  // (carte payée sans nom de facturation) ou pour une écriture manuelle : contrairement à "member"
-  // (texte libre, affichage seulement), ceci est un vrai lien vers la fiche payeur, utilisé pour
-  // générer la facture, et jamais touché par une resynchro Stripe (voir upsertTransactionByChargeId,
-  // dont l'UPDATE ne référence ni member ni linked_payer_id).
-  ensureColumn(db, "transactions", "linked_payer_id", "linked_payer_id TEXT")
-  // Numéro de facture (ex. "202611211" = date du règlement "20261121" + 1er numéro attribué ce
-  // jour-là), attribué une seule fois au premier aperçu/téléchargement de la facture puis conservé
-  // définitivement (voir getOrAssignInvoiceNumber) — ne doit jamais être recalculé ensuite, y compris
-  // après une resynchro Stripe, pour rester une référence stable sur les documents déjà remis.
-  ensureColumn(db, "transactions", "invoice_number", "invoice_number TEXT")
-  // Une fois que le trésorier a corrigé à la main le nom d'un payeur (ex. mise en forme NOM/Prénom,
-  // faute de frappe Stripe), une resynchro Stripe ne doit plus jamais l'écraser — voir
-  // upsertPayerByStripeId/upsertGuestPayer.
-  ensureColumn(db, "payers", "name_manually_edited", "name_manually_edited INTEGER NOT NULL DEFAULT 0")
-  // Facture réellement générée par Stripe (Stripe Invoicing) pour cette charge, quand elle existe :
-  // on préfère toujours la vraie facture Stripe à celle que l'on génère nous-mêmes.
-  ensureColumn(db, "transactions", "stripe_invoice_pdf_url", "stripe_invoice_pdf_url TEXT")
-  // Ajouté après la sortie initiale du devis : les devis déjà créés n'ont pas cette colonne tant
-  // que ce IF NOT EXISTS ne la crée pas explicitement.
-  ensureColumn(db, "quotes", "validity_text", "validity_text TEXT NOT NULL DEFAULT ''")
-  // Double authentification (TOTP) pour la récupération de mot de passe — voir lib/crypto/totp.ts.
-  ensureColumn(db, "users", "totp_secret", "totp_secret TEXT")
-
-  migrateSeasonMembershipBackfill(db)
-  migrateDisciplinesBackfill(db)
-  migratePayersBackfill(db)
+/* ---------- Sync NAS : journal de changements (voir shared/sync-schema.js pour les tables) ----------
+ * Chaque fonction de mutation ci-dessous appelle recordChange() juste après avoir écrit, pour que la
+ * synchronisation NAS (electron/nas-sync.js, pas encore implémentée à ce stade) ait un journal fiable
+ * et complet à pousser/tirer. Jamais appelé lors de l'application d'un changement REÇU du NAS (qui
+ * applique directement via applyRemotePayload, sans repasser par ces fonctions) — sinon un changement
+ * reçu serait repoussé indéfiniment en boucle. */
+function getDeviceId(database) {
+  if (cachedDeviceId) return cachedDeviceId
+  const row = database.prepare("SELECT value FROM sync_meta WHERE key = 'device_id'").get()
+  cachedDeviceId = row?.value || "unknown"
+  return cachedDeviceId
 }
 
-/** Les disciplines étaient une liste fixe codée en dur ("Kung-fu Adulte", "Ado", "Enfant"…) : on la
- * transforme en liste librement modifiable par le trésorier (ajout, suppression, prix), comme pour
- * le matériel. Pour ne rien perdre, on importe une fois pour toutes les anciennes disciplines fixes
- * (avec leur tarif déjà configuré dans cotisation_prices, s'il existe) et toute valeur de "cours"
- * déjà utilisée par un client — ainsi aucune fiche existante ne se retrouve avec un cours orphelin. */
-function migrateDisciplinesBackfill(db) {
-  const already = db.prepare("SELECT value FROM settings WHERE key = 'disciplinesMigrated'").get()
-  if (already) return
-
-  const legacyCourseTypes = [
-    "Kung-fu Adulte",
-    "Kung-fu Ado",
-    "Kung-fu Enfant",
-    "Fitness de combat",
-    "Tai-chi",
-    "Self-défense",
-  ]
-  const usedStatuses = db
-    .prepare("SELECT DISTINCT status FROM clients WHERE status IS NOT NULL AND status <> 'Non catégorisé'")
-    .all()
-    .map((r) => r.status)
-  const prices = Object.fromEntries(
-    db.prepare("SELECT course_type, price FROM cotisation_prices").all().map((r) => [r.course_type, r.price]),
-  )
-
-  const labels = new Set([...legacyCourseTypes, ...usedStatuses])
-  const insert = db.prepare(
-    `INSERT INTO disciplines (id, label, price) VALUES (@id, @label, @price)
-     ON CONFLICT(label) DO NOTHING`,
-  )
-  for (const label of labels) {
-    insert.run({ id: crypto.randomUUID(), label, price: prices[label] ?? 0 })
-  }
-
-  db.prepare("INSERT INTO settings (key, value) VALUES ('disciplinesMigrated', '1')").run()
+/** `payload` est la ligne complète (déjà relue en base) pour un upsert, ou `null` pour une
+ * suppression. `version` est la valeur de sync_version déjà posée sur la ligne par l'appelant. */
+function recordChange(database, table, rowId, op, payload, version) {
+  database
+    .prepare(
+      `INSERT INTO sync_changes (table_name, row_id, op, payload_json, version, updated_at, device_id)
+       VALUES (@table, @rowId, @op, @payloadJson, @version, datetime('now'), @deviceId)`,
+    )
+    .run({
+      table,
+      rowId: String(rowId),
+      op,
+      payloadJson: op === "delete" ? null : JSON.stringify(payload),
+      version: version ?? 1,
+      deviceId: getDeviceId(database),
+    })
 }
 
-/** Un "client" mélangeait jusqu'ici deux rôles différents : l'adhérent (celui qui suit un cours) et
- * le payeur (celui qui règle — souvent un parent, pas forcément lui-même adhérent). On les sépare :
- * chaque adhérent garde sa fiche (cours, statut payé) mais pointe désormais vers une fiche "payeur"
- * distincte (payer_id) au lieu de pointer vers une autre fiche client (guardian_id). Ne s'exécute
- * qu'une fois ; ne supprime jamais de fiche existante (trop risqué sur des données réelles) — les
- * anciennes fiches "tuteur" qui n'étaient en fait que des payeurs restent visibles dans Adhérents
- * jusqu'à ce que le trésorier les nettoie lui-même depuis l'écran dédié. */
-function migratePayersBackfill(db) {
-  const already = db.prepare("SELECT value FROM settings WHERE key = 'payersMigrated'").get()
-  if (already) return
-
-  const clients = db.prepare("SELECT * FROM clients").all()
-  const insertPayer = db.prepare(
-    `INSERT INTO payers (id, stripe_customer_id, first_name, last_name, email, phone, address, postal_code, city)
-     VALUES (@id, @stripeCustomerId, @firstName, @lastName, @email, @phone, @address, @postalCode, @city)`,
-  )
-  const setPayerId = db.prepare("UPDATE clients SET payer_id = @payerId WHERE id = @clientId")
-
-  // clientId de la personne "résolue" comme payeur -> id du payer déjà créé pour elle (une fratrie
-  // partageant le même tuteur ne doit donner naissance qu'à un seul payeur, pas un par enfant).
-  const payerIdByResolvedClientId = new Map()
-
-  function resolvePayerClientId(client) {
-    if (!client.guardian_id) return client.id
-    const guardian = clients.find((c) => c.id === client.guardian_id)
-    return guardian ? guardian.id : client.id
-  }
-
-  for (const client of clients) {
-    const resolvedId = resolvePayerClientId(client)
-    let payerId = payerIdByResolvedClientId.get(resolvedId)
-    if (!payerId) {
-      const source = clients.find((c) => c.id === resolvedId) || client
-      payerId = crypto.randomUUID()
-      insertPayer.run({
-        id: payerId,
-        stripeCustomerId: source.stripe_customer_id || null,
-        firstName: source.first_name,
-        lastName: source.last_name,
-        email: source.email || "",
-        phone: source.phone || "",
-        address: source.address || "",
-        postalCode: source.postal_code || "",
-        city: source.city || "",
-      })
-      payerIdByResolvedClientId.set(resolvedId, payerId)
-    }
-    setPayerId.run({ payerId, clientId: client.id })
-  }
-
-  db.prepare("INSERT INTO settings (key, value) VALUES ('payersMigrated', '1')").run()
+/** Incrémente sync_version + met à jour updated_at sur une ligne déjà écrite, puis journalise un
+ * changement "upsert" avec la ligne complète relue en base (évite de reconstruire un payload complet
+ * à partir d'un patch partiel, qui pourrait omettre des colonnes inconnues de l'appelant). */
+function bumpAndRecord(database, table, pkColumn, pkValue, rowId) {
+  database
+    .prepare(
+      `UPDATE ${table} SET sync_version = sync_version + 1, updated_at = datetime('now') WHERE ${pkColumn} = @pk`,
+    )
+    .run({ pk: pkValue })
+  const row = database.prepare(`SELECT * FROM ${table} WHERE ${pkColumn} = @pk`).get({ pk: pkValue })
+  recordChange(database, table, rowId ?? pkValue, "upsert", row, row?.sync_version)
 }
 
-/** Avant cette fonctionnalité, "client_seasons" ne servait qu'à surclasser cours/payé : une
- * saison sans ligne explicite affichait quand même tous les clients (repli sur la fiche globale).
- * On bascule désormais vers une vraie appartenance par saison (un client n'apparaît que s'il a une
- * ligne "client_seasons"), donc pour ne pas vider d'un coup une saison déjà utilisée, on inscrit une
- * fois pour toutes tous les clients actuels dans chaque saison existante qui n'a encore aucune ligne.
- * Ne s'exécute qu'une seule fois (marqueur en base) : les saisons créées après ce passage démarrent
- * volontairement avec un effectif vide, comme demandé. */
-function migrateSeasonMembershipBackfill(db) {
-  const already = db.prepare("SELECT value FROM settings WHERE key = 'seasonMembershipMigrated'").get()
-  if (already) return
-
-  const seasons = db.prepare("SELECT id FROM seasons").all()
-  const clients = db.prepare("SELECT id, status, paid FROM clients").all()
-  const insert = db.prepare(
-    `INSERT INTO client_seasons (client_id, season_id, status, paid)
-     VALUES (@clientId, @seasonId, @status, @paid)
-     ON CONFLICT(client_id, season_id) DO NOTHING`,
-  )
-  for (const season of seasons) {
-    const count = db.prepare("SELECT COUNT(*) AS n FROM client_seasons WHERE season_id = ?").get(season.id).n
-    if (count > 0) continue
-    for (const client of clients) {
-      insert.run({ clientId: client.id, seasonId: season.id, status: client.status, paid: client.paid })
-    }
-  }
-  db.prepare("INSERT INTO settings (key, value) VALUES ('seasonMembershipMigrated', '1')").run()
-}
-
-/** Ajoute une colonne à une table existante si elle n'y est pas déjà (les CREATE TABLE IF NOT EXISTS ci-dessus ne touchent pas les tables déjà créées lors d'une version antérieure). */
-function ensureColumn(database, table, column, columnDdl) {
-  const columns = database.prepare(`PRAGMA table_info(${table})`).all()
-  if (!columns.some((c) => c.name === column)) {
-    database.exec(`ALTER TABLE ${table} ADD COLUMN ${columnDdl}`)
+/** Suppression douce (tombstone) : jamais de vrai DELETE sur une table synchronisée, pour que la
+ * suppression puisse se propager au NAS et aux autres postes au lieu d'être invisible pour eux.
+ * Idempotent (AND deleted_at IS NULL) : supprimer deux fois une ligne déjà supprimée ne journalise
+ * rien de plus. */
+function softDelete(database, table, pkColumn, pkValue, rowId) {
+  const result = database
+    .prepare(
+      `UPDATE ${table} SET deleted_at = datetime('now'), sync_version = sync_version + 1, updated_at = datetime('now')
+       WHERE ${pkColumn} = @pk AND deleted_at IS NULL`,
+    )
+    .run({ pk: pkValue })
+  if (result.changes > 0) {
+    recordChange(database, table, rowId ?? pkValue, "delete", null, null)
   }
 }
 
@@ -404,23 +86,24 @@ function ensureColumn(database, table, column, columnDdl) {
 function getUsers() {
   return getDb()
     .prepare(
-      "SELECT id, name, email, role, security_question FROM users ORDER BY created_at",
+      "SELECT id, name, email, role, security_question FROM users WHERE deleted_at IS NULL ORDER BY created_at",
     )
     .all()
 }
 
 function countUsers() {
-  return getDb().prepare("SELECT COUNT(*) AS n FROM users").get().n
+  return getDb().prepare("SELECT COUNT(*) AS n FROM users WHERE deleted_at IS NULL").get().n
 }
 
 function findUserByEmail(email) {
   return getDb()
-    .prepare("SELECT * FROM users WHERE lower(email) = lower(?)")
+    .prepare("SELECT * FROM users WHERE lower(email) = lower(?) AND deleted_at IS NULL")
     .get(email.trim())
 }
 
 function createUser({ id, name, email, passwordHash, role, securityQuestion, securityAnswerHash }) {
-  getDb()
+  const database = getDb()
+  database
     .prepare(
       `INSERT INTO users (id, name, email, password_hash, role, security_question, security_answer_hash)
        VALUES (@id, @name, @email, @passwordHash, @role, @securityQuestion, @securityAnswerHash)`,
@@ -434,6 +117,7 @@ function createUser({ id, name, email, passwordHash, role, securityQuestion, sec
       securityQuestion: securityQuestion ?? null,
       securityAnswerHash: securityAnswerHash ?? null,
     })
+  bumpAndRecord(database, "users", "id", id)
 }
 
 function updateUser(id, patch) {
@@ -454,25 +138,26 @@ function updateUser(id, patch) {
     }
   }
   if (fields.length === 0) return
-  getDb()
-    .prepare(`UPDATE users SET ${fields.join(", ")} WHERE id = @id`)
-    .run(params)
+  const database = getDb()
+  database.prepare(`UPDATE users SET ${fields.join(", ")} WHERE id = @id`).run(params)
+  bumpAndRecord(database, "users", "id", id)
 }
 
 function deleteUser(id) {
-  getDb().prepare("DELETE FROM users WHERE id = ?").run(id)
+  softDelete(getDb(), "users", "id", id)
 }
 
 /* ---------- Clients ---------- */
 function getClients() {
-  return getDb().prepare("SELECT * FROM clients ORDER BY created_at").all()
+  return getDb().prepare("SELECT * FROM clients WHERE deleted_at IS NULL ORDER BY created_at").all()
 }
 
 function createClient(client) {
   // node:sqlite refuse tout paramètre nommé non référencé dans la requête : on construit l'objet
   // passé à .run() champ par champ plutôt que de "spreader" `client` (qui peut porter d'autres clés
   // ajoutées côté renderer), pour ne jamais recasser silencieusement cet insert à chaque nouveau champ.
-  getDb()
+  const database = getDb()
+  database
     .prepare(
       `INSERT INTO clients (id, first_name, last_name, email, status, method, paid, address, phone, birth_date, postal_code, city, payer_id, board_role, payer_relationship)
        VALUES (@id, @firstName, @lastName, @email, @status, @method, @paid, @address, @phone, @birthDate, @postalCode, @city, @payerId, @boardRole, @payerRelationship)`,
@@ -494,25 +179,27 @@ function createClient(client) {
       boardRole: client.boardRole ?? null,
       payerRelationship: client.payerRelationship ?? null,
     })
+  bumpAndRecord(database, "clients", "id", client.id)
 }
 
 function getClientById(id) {
-  return getDb().prepare("SELECT * FROM clients WHERE id = ?").get(id) ?? null
+  return getDb().prepare("SELECT * FROM clients WHERE id = ? AND deleted_at IS NULL").get(id) ?? null
 }
 
 /* ---------- Payeurs (identité de facturation — distincte des adhérents, voir migratePayersBackfill) ---------- */
 function getPayers() {
-  return getDb().prepare("SELECT * FROM payers ORDER BY created_at").all()
+  return getDb().prepare("SELECT * FROM payers WHERE deleted_at IS NULL ORDER BY created_at").all()
 }
 
 function getPayerById(id) {
   if (!id) return null
-  return getDb().prepare("SELECT * FROM payers WHERE id = ?").get(id) ?? null
+  return getDb().prepare("SELECT * FROM payers WHERE id = ? AND deleted_at IS NULL").get(id) ?? null
 }
 
 function createPayer(payer) {
   const id = payer.id || crypto.randomUUID()
-  getDb()
+  const database = getDb()
+  database
     .prepare(
       `INSERT INTO payers (id, stripe_customer_id, first_name, last_name, email, phone, address, postal_code, city)
        VALUES (@id, @stripeCustomerId, @firstName, @lastName, @email, @phone, @address, @postalCode, @city)`,
@@ -528,6 +215,7 @@ function createPayer(payer) {
       postalCode: payer.postalCode || "",
       city: payer.city || "",
     })
+  bumpAndRecord(database, "payers", "id", id)
   return id
 }
 
@@ -537,7 +225,7 @@ function createPayer(payer) {
 function findOrCreatePayerByName(firstName, lastName) {
   const existing = getDb()
     .prepare(
-      `SELECT id FROM payers WHERE lower(trim(first_name)) = lower(trim(@firstName)) AND lower(trim(last_name)) = lower(trim(@lastName))`,
+      `SELECT id FROM payers WHERE lower(trim(first_name)) = lower(trim(@firstName)) AND lower(trim(last_name)) = lower(trim(@lastName)) AND deleted_at IS NULL`,
     )
     .get({ firstName, lastName })
   if (existing) return existing.id
@@ -558,12 +246,13 @@ function nextNumberForDate(table, column, dateStr) {
 /** Attribue un numéro de facture à une transaction au premier appel (aperçu ou téléchargement) puis
  * le renvoie tel quel ensuite — ne doit jamais changer une fois posé, voir ensureColumn ci-dessus. */
 function getOrAssignInvoiceNumber(transactionId) {
-  const db = getDb()
-  const tx = db.prepare("SELECT id, date, invoice_number FROM transactions WHERE id = ?").get(transactionId)
+  const database = getDb()
+  const tx = database.prepare("SELECT id, date, invoice_number FROM transactions WHERE id = ?").get(transactionId)
   if (!tx) return null
   if (tx.invoice_number) return tx.invoice_number
   const number = nextNumberForDate("transactions", "invoice_number", tx.date)
-  db.prepare("UPDATE transactions SET invoice_number = @number WHERE id = @id").run({ number, id: transactionId })
+  database.prepare("UPDATE transactions SET invoice_number = @number WHERE id = @id").run({ number, id: transactionId })
+  bumpAndRecord(database, "transactions", "id", transactionId)
   return number
 }
 
@@ -591,14 +280,19 @@ function updatePayer(id, patch) {
   if (patch.firstName !== undefined || patch.lastName !== undefined) {
     fields.push("name_manually_edited = 1")
   }
-  getDb().prepare(`UPDATE payers SET ${fields.join(", ")} WHERE id = @id`).run(params)
+  const database = getDb()
+  database.prepare(`UPDATE payers SET ${fields.join(", ")} WHERE id = @id`).run(params)
+  bumpAndRecord(database, "payers", "id", id)
 }
 
 function deletePayer(id) {
   // Jamais de suppression en cascade : les adhérents liés perdent juste leur payeur (plutôt que
   // d'être supprimés eux aussi), le trésorier devra leur en choisir un autre s'il en faut un.
-  getDb().prepare("UPDATE clients SET payer_id = NULL WHERE payer_id = ?").run(id)
-  getDb().prepare("DELETE FROM payers WHERE id = ?").run(id)
+  const database = getDb()
+  const linkedClients = database.prepare("SELECT id FROM clients WHERE payer_id = ? AND deleted_at IS NULL").all(id)
+  database.prepare("UPDATE clients SET payer_id = NULL WHERE payer_id = ?").run(id)
+  for (const c of linkedClients) bumpAndRecord(database, "clients", "id", c.id)
+  softDelete(database, "payers", "id", id)
 }
 
 /** Retrouve un payeur existant pour l'import/le rapprochement : par email (insensible à la casse)
@@ -606,12 +300,14 @@ function deletePayer(id) {
 function findPayerForImport({ email, firstName, lastName }) {
   if (email) {
     const match = getDb()
-      .prepare("SELECT * FROM payers WHERE email <> '' AND lower(email) = lower(@email)")
+      .prepare("SELECT * FROM payers WHERE email <> '' AND lower(email) = lower(@email) AND deleted_at IS NULL")
       .get({ email })
     if (match) return match
   }
   return getDb()
-    .prepare(`SELECT * FROM payers WHERE lower(first_name) = lower(@firstName) AND lower(last_name) = lower(@lastName)`)
+    .prepare(
+      `SELECT * FROM payers WHERE lower(first_name) = lower(@firstName) AND lower(last_name) = lower(@lastName) AND deleted_at IS NULL`,
+    )
     .get({ firstName, lastName })
 }
 
@@ -631,7 +327,9 @@ function ensurePayerForClient(clientId) {
     postalCode: client.postal_code || "",
     city: client.city || "",
   })
-  getDb().prepare("UPDATE clients SET payer_id = @payerId WHERE id = @id").run({ payerId, id: clientId })
+  const database = getDb()
+  database.prepare("UPDATE clients SET payer_id = @payerId WHERE id = @id").run({ payerId, id: clientId })
+  bumpAndRecord(database, "clients", "id", clientId)
   return payerId
 }
 
@@ -641,35 +339,41 @@ function ensurePayerForClient(clientId) {
  * payeur (avec l'id Stripe cette fois), détaché des adhérents déjà liés au premier, et plus aucune
  * mise à jour automatique de cours ne fonctionnerait pour eux. */
 function upsertPayerByStripeId(payer) {
-  const byStripeId = getDb().prepare("SELECT id, name_manually_edited FROM payers WHERE stripe_customer_id = ?").get(payer.stripeCustomerId)
+  const database = getDb()
+  const byStripeId = database
+    .prepare("SELECT id, name_manually_edited FROM payers WHERE stripe_customer_id = ? AND deleted_at IS NULL")
+    .get(payer.stripeCustomerId)
   if (byStripeId) {
     if (byStripeId.name_manually_edited) {
       // node:sqlite refuse les paramètres nommés surnuméraires : on ne peut pas réutiliser l'objet
       // "payer" tel quel (il porte aussi firstName/lastName, absents de cette requête).
-      getDb()
+      database
         .prepare(`UPDATE payers SET email=@email WHERE stripe_customer_id=@stripeCustomerId`)
         .run({ email: payer.email, stripeCustomerId: payer.stripeCustomerId })
     } else {
-      getDb()
+      database
         .prepare(
           `UPDATE payers SET first_name=@firstName, last_name=@lastName, email=@email WHERE stripe_customer_id=@stripeCustomerId`,
         )
         .run(payer)
     }
+    bumpAndRecord(database, "payers", "id", byStripeId.id)
     return byStripeId.id
   }
 
   if (payer.email) {
-    const byEmail = getDb()
-      .prepare("SELECT id, stripe_customer_id, name_manually_edited FROM payers WHERE email <> '' AND lower(email) = lower(?)")
+    const byEmail = database
+      .prepare(
+        "SELECT id, stripe_customer_id, name_manually_edited FROM payers WHERE email <> '' AND lower(email) = lower(?) AND deleted_at IS NULL",
+      )
       .get(payer.email)
     if (byEmail && !byEmail.stripe_customer_id) {
       if (byEmail.name_manually_edited) {
-        getDb()
+        database
           .prepare(`UPDATE payers SET stripe_customer_id=@stripeCustomerId WHERE id=@id`)
           .run({ stripeCustomerId: payer.stripeCustomerId, id: byEmail.id })
       } else {
-        getDb()
+        database
           .prepare(
             `UPDATE payers SET stripe_customer_id=@stripeCustomerId, first_name=@firstName, last_name=@lastName WHERE id=@id`,
           )
@@ -680,6 +384,7 @@ function upsertPayerByStripeId(payer) {
             id: byEmail.id,
           })
       }
+      bumpAndRecord(database, "payers", "id", byEmail.id)
       return byEmail.id
     }
   }
@@ -692,7 +397,9 @@ function upsertPayerByStripeId(payer) {
 function findGuestPayer({ email, firstName, lastName }) {
   if (email) {
     return getDb()
-      .prepare("SELECT id, name_manually_edited FROM payers WHERE stripe_customer_id IS NULL AND email = ?")
+      .prepare(
+        "SELECT id, name_manually_edited FROM payers WHERE stripe_customer_id IS NULL AND email = ? AND deleted_at IS NULL",
+      )
       .get(email)
   }
   // Insensible à la casse : une fois le nom corrigé à la main (ex. mise en forme NOM/Prénom), le
@@ -701,7 +408,7 @@ function findGuestPayer({ email, firstName, lastName }) {
   return getDb()
     .prepare(
       `SELECT id, name_manually_edited FROM payers
-       WHERE stripe_customer_id IS NULL AND (email IS NULL OR email = '')
+       WHERE stripe_customer_id IS NULL AND (email IS NULL OR email = '') AND deleted_at IS NULL
          AND lower(first_name) = lower(@firstName) AND lower(last_name) = lower(@lastName)`,
     )
     .get({ firstName, lastName })
@@ -711,9 +418,11 @@ function upsertGuestPayer(payer) {
   const existing = findGuestPayer(payer)
   if (existing) {
     if (!existing.name_manually_edited) {
-      getDb()
+      const database = getDb()
+      database
         .prepare(`UPDATE payers SET first_name=@firstName, last_name=@lastName WHERE id=@id`)
         .run({ firstName: payer.firstName, lastName: payer.lastName, id: existing.id })
+      bumpAndRecord(database, "payers", "id", existing.id)
     }
     return existing.id
   }
@@ -731,11 +440,15 @@ function findPayerForTransaction(tx) {
     return null
   }
   if (charge.customer) {
-    return getDb().prepare("SELECT * FROM payers WHERE stripe_customer_id = ?").get(charge.customer) ?? null
+    return getDb().prepare("SELECT * FROM payers WHERE stripe_customer_id = ? AND deleted_at IS NULL").get(charge.customer) ?? null
   }
   const email = charge.billing_details?.email || charge.receipt_email || null
   if (email) {
-    return getDb().prepare("SELECT * FROM payers WHERE stripe_customer_id IS NULL AND email = ?").get(email) ?? null
+    return (
+      getDb()
+        .prepare("SELECT * FROM payers WHERE stripe_customer_id IS NULL AND email = ? AND deleted_at IS NULL")
+        .get(email) ?? null
+    )
   }
   if (charge.billing_details?.name) {
     const parts = charge.billing_details.name.trim().split(/\s+/)
@@ -745,7 +458,8 @@ function findPayerForTransaction(tx) {
       getDb()
         .prepare(
           `SELECT * FROM payers
-           WHERE stripe_customer_id IS NULL AND (email IS NULL OR email = '') AND first_name = ? AND last_name = ?`,
+           WHERE stripe_customer_id IS NULL AND (email IS NULL OR email = '') AND deleted_at IS NULL
+             AND first_name = ? AND last_name = ?`,
         )
         .get(firstName, lastName) ?? null
     )
@@ -760,7 +474,7 @@ function enrollInActiveSeasonIfNeeded(clientId, status) {
   const activeSeasonId = getSettings().activeSeasonId
   if (!activeSeasonId) return
   const already = getDb()
-    .prepare("SELECT 1 FROM client_seasons WHERE client_id = @clientId AND season_id = @activeSeasonId")
+    .prepare("SELECT 1 FROM client_seasons WHERE client_id = @clientId AND season_id = @activeSeasonId AND deleted_at IS NULL")
     .get({ clientId, activeSeasonId })
   if (already) return
   setClientSeason(clientId, activeSeasonId, { status: status || "Non catégorisé", paid: false })
@@ -772,7 +486,7 @@ function enrollInActiveSeasonIfNeeded(clientId, status) {
 function findClientsByEmail(email) {
   if (!email) return []
   return getDb()
-    .prepare("SELECT * FROM clients WHERE email <> '' AND lower(email) = lower(@email)")
+    .prepare("SELECT * FROM clients WHERE email <> '' AND lower(email) = lower(@email) AND deleted_at IS NULL")
     .all({ email })
 }
 
@@ -780,13 +494,13 @@ function findClientsByEmail(email) {
 function findClientForImport({ email, firstName, lastName }) {
   if (email) {
     const match = getDb()
-      .prepare("SELECT * FROM clients WHERE email <> '' AND lower(email) = lower(@email)")
+      .prepare("SELECT * FROM clients WHERE email <> '' AND lower(email) = lower(@email) AND deleted_at IS NULL")
       .get({ email })
     if (match) return match
   }
   return getDb()
     .prepare(
-      `SELECT * FROM clients WHERE lower(first_name) = lower(@firstName) AND lower(last_name) = lower(@lastName)`,
+      `SELECT * FROM clients WHERE lower(first_name) = lower(@firstName) AND lower(last_name) = lower(@lastName) AND deleted_at IS NULL`,
     )
     .get({ firstName, lastName })
 }
@@ -797,33 +511,36 @@ function findClientForImport({ email, firstName, lastName }) {
  * catégorise à la main. N'écrase jamais non plus un cours déjà choisi. */
 function applyDetectedCourseType({ stripeCustomerId, email, firstName, lastName, courseType }) {
   if (!courseType) return
+  const database = getDb()
   const payer = stripeCustomerId
-    ? getDb().prepare("SELECT id FROM payers WHERE stripe_customer_id = ?").get(stripeCustomerId)
+    ? database.prepare("SELECT id FROM payers WHERE stripe_customer_id = ? AND deleted_at IS NULL").get(stripeCustomerId)
     : findGuestPayer({ email, firstName, lastName })
   if (!payer) return
 
-  const linkedClients = getDb()
-    .prepare("SELECT id, status FROM clients WHERE payer_id = ? AND status = 'Non catégorisé'")
+  const linkedClients = database
+    .prepare("SELECT id, status FROM clients WHERE payer_id = ? AND status = 'Non catégorisé' AND deleted_at IS NULL")
     .all(payer.id)
   if (linkedClients.length !== 1) return
   const row = linkedClients[0]
 
-  getDb().prepare("UPDATE clients SET status = @status WHERE id = @id").run({ status: courseType, id: row.id })
+  database.prepare("UPDATE clients SET status = @status WHERE id = @id").run({ status: courseType, id: row.id })
+  bumpAndRecord(database, "clients", "id", row.id)
 
   // Si cet adhérent est déjà inscrit à la saison active avec un cours encore indéterminé, on
   // répercute le cours détecté sur son inscription (sinon la page Clients resterait figée
   // sur "Non catégorisé" malgré la mise à jour de sa fiche globale ci-dessus).
   const activeSeasonId = getSettings().activeSeasonId
   if (!activeSeasonId) return
-  const seasonRow = getDb()
-    .prepare("SELECT status FROM client_seasons WHERE client_id = @id AND season_id = @activeSeasonId")
+  const seasonRow = database
+    .prepare("SELECT status FROM client_seasons WHERE client_id = @id AND season_id = @activeSeasonId AND deleted_at IS NULL")
     .get({ id: row.id, activeSeasonId })
   if (seasonRow && seasonRow.status === "Non catégorisé") {
-    getDb()
+    database
       .prepare(
         "UPDATE client_seasons SET status = @status WHERE client_id = @id AND season_id = @activeSeasonId",
       )
       .run({ status: courseType, id: row.id, activeSeasonId })
+    bumpAndRecord(database, "client_seasons", "client_id", row.id, `${row.id}:${activeSeasonId}`)
   }
 }
 
@@ -852,58 +569,72 @@ function updateClient(id, patch) {
     }
   }
   if (fields.length === 0) return
-  getDb().prepare(`UPDATE clients SET ${fields.join(", ")} WHERE id = @id`).run(params)
+  const database = getDb()
+  database.prepare(`UPDATE clients SET ${fields.join(", ")} WHERE id = @id`).run(params)
+  bumpAndRecord(database, "clients", "id", id)
 }
 
 function deleteClient(id) {
-  getDb().prepare("DELETE FROM clients WHERE id = ?").run(id)
-  getDb().prepare("DELETE FROM client_seasons WHERE client_id = ?").run(id)
+  const database = getDb()
+  softDelete(database, "clients", "id", id)
+  const seasonRows = database.prepare("SELECT client_id, season_id FROM client_seasons WHERE client_id = ? AND deleted_at IS NULL").all(id)
+  database.prepare("UPDATE client_seasons SET deleted_at = datetime('now'), sync_version = sync_version + 1, updated_at = datetime('now') WHERE client_id = ? AND deleted_at IS NULL").run(id)
+  for (const row of seasonRows) {
+    recordChange(database, "client_seasons", `${row.client_id}:${row.season_id}`, "delete", null, null)
+  }
 }
 
 /* ---------- Lots d'import (Excel clients) : traçabilité pour permettre l'annulation ---------- */
 function createImportBatch({ id, createdCount, updatedCount, skippedCount }) {
-  getDb()
+  const database = getDb()
+  database
     .prepare(
       `INSERT INTO import_batches (id, created_count, updated_count, skipped_count)
        VALUES (@id, @createdCount, @updatedCount, @skippedCount)`,
     )
     .run({ id, createdCount, updatedCount, skippedCount })
+  bumpAndRecord(database, "import_batches", "id", id)
 }
 
 function addImportBatchChange({ id, batchId, clientId, kind, previousJson }) {
-  getDb()
+  const database = getDb()
+  database
     .prepare(
       `INSERT INTO import_batch_changes (id, batch_id, client_id, kind, previous_json)
        VALUES (@id, @batchId, @clientId, @kind, @previousJson)`,
     )
     .run({ id, batchId, clientId, kind, previousJson: previousJson ?? null })
+  bumpAndRecord(database, "import_batch_changes", "id", id)
 }
 
 function getImportBatches() {
   return getDb()
-    .prepare("SELECT * FROM import_batches ORDER BY created_at DESC LIMIT 10")
+    .prepare("SELECT * FROM import_batches WHERE deleted_at IS NULL ORDER BY created_at DESC LIMIT 10")
     .all()
 }
 
 function getImportBatchChanges(batchId) {
-  return getDb().prepare("SELECT * FROM import_batch_changes WHERE batch_id = ?").all(batchId)
+  return getDb().prepare("SELECT * FROM import_batch_changes WHERE batch_id = ? AND deleted_at IS NULL").all(batchId)
 }
 
 function markImportBatchUndone(batchId) {
-  getDb().prepare("UPDATE import_batches SET undone = 1 WHERE id = ?").run(batchId)
+  const database = getDb()
+  database.prepare("UPDATE import_batches SET undone = 1 WHERE id = ?").run(batchId)
+  bumpAndRecord(database, "import_batches", "id", batchId)
 }
 
 /* ---------- Transactions ---------- */
 function getTransactions() {
-  return getDb().prepare("SELECT * FROM transactions ORDER BY date DESC").all()
+  return getDb().prepare("SELECT * FROM transactions WHERE deleted_at IS NULL ORDER BY date DESC").all()
 }
 
 function getTransactionById(id) {
-  return getDb().prepare("SELECT * FROM transactions WHERE id = ?").get(id)
+  return getDb().prepare("SELECT * FROM transactions WHERE id = ? AND deleted_at IS NULL").get(id)
 }
 
 function createTransaction(tx) {
-  getDb()
+  const database = getDb()
+  database
     .prepare(
       `INSERT INTO transactions
         (id, date, description, member, method, category, type, amount, status,
@@ -926,6 +657,7 @@ function createTransaction(tx) {
       stripeRawJson: null,
       ...tx,
     })
+  bumpAndRecord(database, "transactions", "id", tx.id)
 }
 
 /** Insère une transaction par id si elle n'existe pas déjà (jamais de mise à jour, comme upsertTransactionByChargeId). */
@@ -936,7 +668,8 @@ function upsertTransactionById(tx) {
 }
 
 function upsertTransactionByChargeId(tx) {
-  const existing = getDb()
+  const database = getDb()
+  const existing = database
     .prepare("SELECT id FROM transactions WHERE stripe_charge_id = ?")
     .get(tx.stripeChargeId)
   if (existing) {
@@ -944,7 +677,7 @@ function upsertTransactionByChargeId(tx) {
     // modifiée depuis le Dashboard Stripe après coup, ou le payload brut dont dépend l'affichage
     // des remboursements) — mais jamais la catégorie, le statut ou l'adhérent lié : ce sont des
     // choix du trésorier, une resynchro ne doit jamais les écraser.
-    getDb()
+    database
       .prepare(
         `UPDATE transactions
          SET description = @description, amount = @amount, stripe_fee = @stripeFee,
@@ -961,6 +694,7 @@ function upsertTransactionByChargeId(tx) {
         stripePaymentIntentId: tx.stripePaymentIntentId ?? null,
         stripeRawJson: tx.stripeRawJson ?? null,
       })
+    bumpAndRecord(database, "transactions", "id", existing.id)
     return
   }
   createTransaction(tx)
@@ -987,16 +721,18 @@ function updateTransaction(id, patch) {
     }
   }
   if (fields.length === 0) return
-  getDb().prepare(`UPDATE transactions SET ${fields.join(", ")} WHERE id = @id`).run(params)
+  const database = getDb()
+  database.prepare(`UPDATE transactions SET ${fields.join(", ")} WHERE id = @id`).run(params)
+  bumpAndRecord(database, "transactions", "id", id)
 }
 
 function deleteTransaction(id) {
-  getDb().prepare("DELETE FROM transactions WHERE id = ?").run(id)
+  softDelete(getDb(), "transactions", "id", id)
 }
 
 /* ---------- Bank transactions (GoCardless) ---------- */
 function getBankTransactions() {
-  return getDb().prepare("SELECT * FROM bank_transactions ORDER BY date DESC").all()
+  return getDb().prepare("SELECT * FROM bank_transactions WHERE deleted_at IS NULL ORDER BY date DESC").all()
 }
 
 function insertBankTransactions(rows) {
@@ -1013,20 +749,26 @@ function insertBankTransactions(rows) {
     database.exec("ROLLBACK")
     throw err
   }
+  for (const row of rows) {
+    const inserted = database.prepare("SELECT * FROM bank_transactions WHERE id = ?").get(row.id)
+    if (inserted) recordChange(database, "bank_transactions", row.id, "upsert", inserted, inserted.sync_version)
+  }
 }
 
 /* ---------- Settings ---------- */
 function getSettings() {
-  const rows = getDb().prepare("SELECT key, value FROM settings").all()
+  const rows = getDb().prepare("SELECT key, value FROM settings WHERE deleted_at IS NULL").all()
   return Object.fromEntries(rows.map((r) => [r.key, r.value]))
 }
 
 function setSetting(key, value) {
-  getDb()
+  const database = getDb()
+  database
     .prepare(
       "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
     )
     .run(key, value)
+  bumpAndRecord(database, "settings", "key", key)
 }
 
 /* ---------- Vault ---------- */
@@ -1035,15 +777,17 @@ function getVault() {
 }
 
 function setVault({ salt_b64, iv_b64, ciphertext_b64 }) {
-  getDb()
+  const database = getDb()
+  database
     .prepare(
       `INSERT INTO vault (id, salt_b64, iv_b64, ciphertext_b64) VALUES (1, ?, ?, ?)
        ON CONFLICT(id) DO UPDATE SET salt_b64 = excluded.salt_b64, iv_b64 = excluded.iv_b64, ciphertext_b64 = excluded.ciphertext_b64`,
     )
     .run(salt_b64, iv_b64, ciphertext_b64)
+  bumpAndRecord(database, "vault", "id", 1)
 }
 
-/* ---------- Sync state ---------- */
+/* ---------- Sync state (curseurs Stripe/GoCardless — différent de la sync NAS) ---------- */
 function getSyncState(provider) {
   return getDb().prepare("SELECT cursor, last_synced_at FROM sync_state WHERE provider = ?").get(provider)
 }
@@ -1059,12 +803,12 @@ function setSyncState(provider, cursor) {
 
 /* ---------- Saisons ---------- */
 function getSeasons() {
-  return getDb().prepare("SELECT * FROM seasons ORDER BY start_date DESC").all()
+  return getDb().prepare("SELECT * FROM seasons WHERE deleted_at IS NULL ORDER BY start_date DESC").all()
 }
 
 function findSeasonByLabel(label) {
   if (!label) return null
-  return getDb().prepare("SELECT * FROM seasons WHERE lower(label) = lower(?)").get(label.trim()) ?? null
+  return getDb().prepare("SELECT * FROM seasons WHERE lower(label) = lower(?) AND deleted_at IS NULL").get(label.trim()) ?? null
 }
 
 /** Retrouve une saison par son libellé (ex. import d'un fichier qui porte une colonne "Saison"),
@@ -1082,9 +826,11 @@ function findOrCreateSeasonByLabel(label) {
 }
 
 function createSeason({ id, label, startDate, endDate }) {
-  getDb()
+  const database = getDb()
+  database
     .prepare("INSERT INTO seasons (id, label, start_date, end_date) VALUES (@id, @label, @startDate, @endDate)")
     .run({ id, label, startDate, endDate })
+  bumpAndRecord(database, "seasons", "id", id)
 }
 
 function updateSeason(id, patch) {
@@ -1101,12 +847,19 @@ function updateSeason(id, patch) {
     }
   }
   if (fields.length === 0) return
-  getDb().prepare(`UPDATE seasons SET ${fields.join(", ")} WHERE id = @id`).run(params)
+  const database = getDb()
+  database.prepare(`UPDATE seasons SET ${fields.join(", ")} WHERE id = @id`).run(params)
+  bumpAndRecord(database, "seasons", "id", id)
 }
 
 function deleteSeason(id) {
-  getDb().prepare("DELETE FROM seasons WHERE id = ?").run(id)
-  getDb().prepare("DELETE FROM client_seasons WHERE season_id = ?").run(id)
+  const database = getDb()
+  softDelete(database, "seasons", "id", id)
+  const seasonRows = database.prepare("SELECT client_id, season_id FROM client_seasons WHERE season_id = ? AND deleted_at IS NULL").all(id)
+  database.prepare("UPDATE client_seasons SET deleted_at = datetime('now'), sync_version = sync_version + 1, updated_at = datetime('now') WHERE season_id = ? AND deleted_at IS NULL").run(id)
+  for (const row of seasonRows) {
+    recordChange(database, "client_seasons", `${row.client_id}:${row.season_id}`, "delete", null, null)
+  }
 }
 
 /** Même comparaison "date locale" que isDateInSeason côté renderer (lib/seasons-store.tsx) : une
@@ -1125,7 +878,8 @@ const SEASON_DELETE_MIN_AGE_YEARS = 5
  * à d'autres saisons sont seulement désinscrits de celle-ci, leur fiche reste intacte), et leur
  * payeur si plus aucun adhérent ne le référence ensuite. Bloqué pour une saison trop récente — la
  * comptabilité associative doit être conservée au moins SEASON_DELETE_MIN_AGE_YEARS ans ; penser à
- * exporter la saison avant de la supprimer, l'opération est irréversible. */
+ * exporter la saison avant de la supprimer, l'opération est irréversible (même si, techniquement,
+ * toutes ces suppressions restent des tombstones — voir softDelete — pour la synchronisation). */
 function deleteSeasonCascade(id) {
   const season = getDb().prepare("SELECT * FROM seasons WHERE id = ?").get(id)
   if (!season) return { ok: false, error: "Saison introuvable" }
@@ -1140,24 +894,32 @@ function deleteSeasonCascade(id) {
     }
   }
 
-  const allTransactions = getDb().prepare("SELECT id, date FROM transactions").all()
+  const allTransactions = getDb().prepare("SELECT id, date FROM transactions WHERE deleted_at IS NULL").all()
   const transactionIds = allTransactions
     .filter((tx) => isDateInRange(tx.date, season.start_date, season.end_date))
     .map((tx) => tx.id)
   for (const txId of transactionIds) deleteTransaction(txId)
 
   const enrolledClientIds = getDb()
-    .prepare("SELECT client_id FROM client_seasons WHERE season_id = ?")
+    .prepare("SELECT client_id FROM client_seasons WHERE season_id = ? AND deleted_at IS NULL")
     .all(id)
     .map((r) => r.client_id)
 
-  getDb().prepare("DELETE FROM client_seasons WHERE season_id = ?").run(id)
+  // Désinscription de TOUS les clients de cette saison (pas seulement ceux qui vont être supprimés
+  // ci-dessous) — c'est le même mécanisme que deleteSeason, dupliqué ici pour ne garder qu'un seul
+  // appel à softDelete par saison/suppression plutôt que deux passes.
+  const database = getDb()
+  const seasonRows = database.prepare("SELECT client_id, season_id FROM client_seasons WHERE season_id = ? AND deleted_at IS NULL").all(id)
+  database.prepare("UPDATE client_seasons SET deleted_at = datetime('now'), sync_version = sync_version + 1, updated_at = datetime('now') WHERE season_id = ? AND deleted_at IS NULL").run(id)
+  for (const row of seasonRows) {
+    recordChange(database, "client_seasons", `${row.client_id}:${row.season_id}`, "delete", null, null)
+  }
 
   let deletedClients = 0
   let deletedPayers = 0
   for (const clientId of enrolledClientIds) {
     const stillElsewhere = getDb()
-      .prepare("SELECT 1 FROM client_seasons WHERE client_id = ?")
+      .prepare("SELECT 1 FROM client_seasons WHERE client_id = ? AND deleted_at IS NULL")
       .get(clientId)
     if (stillElsewhere) continue // inscrit à une autre saison : fiche conservée, juste désinscrit d'ici
 
@@ -1166,7 +928,7 @@ function deleteSeasonCascade(id) {
     deletedClients++
 
     if (client?.payer_id) {
-      const payerStillUsed = getDb().prepare("SELECT 1 FROM clients WHERE payer_id = ?").get(client.payer_id)
+      const payerStillUsed = getDb().prepare("SELECT 1 FROM clients WHERE payer_id = ? AND deleted_at IS NULL").get(client.payer_id)
       if (!payerStillUsed) {
         deletePayer(client.payer_id)
         deletedPayers++
@@ -1174,7 +936,7 @@ function deleteSeasonCascade(id) {
     }
   }
 
-  getDb().prepare("DELETE FROM seasons WHERE id = ?").run(id)
+  softDelete(getDb(), "seasons", "id", id)
 
   return {
     ok: true,
@@ -1190,7 +952,7 @@ function deleteSeasonCascade(id) {
  * incertain pour en déduire une suppression — voir deleteSeasonCascade pour la suppression fiable
  * par plage de dates. */
 function deletePayerCascade(id) {
-  const linkedClients = getDb().prepare("SELECT id FROM clients WHERE payer_id = ?").all(id)
+  const linkedClients = getDb().prepare("SELECT id FROM clients WHERE payer_id = ? AND deleted_at IS NULL").all(id)
   for (const c of linkedClients) deleteClient(c.id)
   deletePayer(id)
   return { ok: true, deletedClients: linkedClients.length }
@@ -1201,37 +963,46 @@ function deletePayerCascade(id) {
  * de son cours/paiement pour cette période. */
 function getClientSeasonMap(seasonId) {
   const rows = getDb()
-    .prepare("SELECT client_id, status, paid FROM client_seasons WHERE season_id = ?")
+    .prepare("SELECT client_id, status, paid FROM client_seasons WHERE season_id = ? AND deleted_at IS NULL")
     .all(seasonId)
   return Object.fromEntries(rows.map((r) => [r.client_id, { status: r.status, paid: !!r.paid }]))
 }
 
 function setClientSeason(clientId, seasonId, { status, paid }) {
-  getDb()
+  const database = getDb()
+  database
     .prepare(
       `INSERT INTO client_seasons (client_id, season_id, status, paid) VALUES (@clientId, @seasonId, @status, @paid)
-       ON CONFLICT(client_id, season_id) DO UPDATE SET status = excluded.status, paid = excluded.paid`,
+       ON CONFLICT(client_id, season_id) DO UPDATE SET status = excluded.status, paid = excluded.paid, deleted_at = NULL`,
     )
     .run({ clientId, seasonId, status, paid: paid ? 1 : 0 })
+  bumpAndRecord(database, "client_seasons", "client_id", clientId, `${clientId}:${seasonId}`)
 }
 
 /** Désinscrit un client d'une saison (la fiche client elle-même n'est jamais supprimée). */
 function deleteClientSeason(clientId, seasonId) {
-  getDb().prepare("DELETE FROM client_seasons WHERE client_id = ? AND season_id = ?").run(clientId, seasonId)
+  const database = getDb()
+  softDelete(database, "client_seasons", "client_id", clientId, `${clientId}:${seasonId}`)
 }
 
 /** Vide l'effectif d'une saison (tous les clients désinscrits) sans supprimer la saison elle-même. */
 function resetSeasonClients(seasonId) {
-  getDb().prepare("DELETE FROM client_seasons WHERE season_id = ?").run(seasonId)
+  const database = getDb()
+  const rows = database.prepare("SELECT client_id, season_id FROM client_seasons WHERE season_id = ? AND deleted_at IS NULL").all(seasonId)
+  database.prepare("UPDATE client_seasons SET deleted_at = datetime('now'), sync_version = sync_version + 1, updated_at = datetime('now') WHERE season_id = ? AND deleted_at IS NULL").run(seasonId)
+  for (const row of rows) {
+    recordChange(database, "client_seasons", `${row.client_id}:${row.season_id}`, "delete", null, null)
+  }
 }
 
 /* ---------- Immobilisations (matériel à amortir) ---------- */
 function getFixedAssets() {
-  return getDb().prepare("SELECT * FROM fixed_assets ORDER BY purchase_date DESC").all()
+  return getDb().prepare("SELECT * FROM fixed_assets WHERE deleted_at IS NULL ORDER BY purchase_date DESC").all()
 }
 
 function createFixedAsset(asset) {
-  getDb()
+  const database = getDb()
+  database
     .prepare(
       `INSERT INTO fixed_assets (id, label, purchase_amount, purchase_date, depreciation_years, disposed, notes)
        VALUES (@id, @label, @purchaseAmount, @purchaseDate, @depreciationYears, @disposed, @notes)`,
@@ -1241,6 +1012,7 @@ function createFixedAsset(asset) {
       disposed: asset.disposed ? 1 : 0,
       notes: asset.notes ?? "",
     })
+  bumpAndRecord(database, "fixed_assets", "id", asset.id)
 }
 
 function updateFixedAsset(id, patch) {
@@ -1260,20 +1032,23 @@ function updateFixedAsset(id, patch) {
     }
   }
   if (fields.length === 0) return
-  getDb().prepare(`UPDATE fixed_assets SET ${fields.join(", ")} WHERE id = @id`).run(params)
+  const database = getDb()
+  database.prepare(`UPDATE fixed_assets SET ${fields.join(", ")} WHERE id = @id`).run(params)
+  bumpAndRecord(database, "fixed_assets", "id", id)
 }
 
 function deleteFixedAsset(id) {
-  getDb().prepare("DELETE FROM fixed_assets WHERE id = ?").run(id)
+  softDelete(getDb(), "fixed_assets", "id", id)
 }
 
 /* ---------- Dettes ---------- */
 function getDebts() {
-  return getDb().prepare("SELECT * FROM debts ORDER BY date DESC").all()
+  return getDb().prepare("SELECT * FROM debts WHERE deleted_at IS NULL ORDER BY date DESC").all()
 }
 
 function createDebt(debt) {
-  getDb()
+  const database = getDb()
+  database
     .prepare(
       `INSERT INTO debts (id, label, amount, date, due_date, settled, notes)
        VALUES (@id, @label, @amount, @date, @dueDate, @settled, @notes)`,
@@ -1284,6 +1059,7 @@ function createDebt(debt) {
       settled: debt.settled ? 1 : 0,
       notes: debt.notes ?? "",
     })
+  bumpAndRecord(database, "debts", "id", debt.id)
 }
 
 function updateDebt(id, patch) {
@@ -1303,40 +1079,46 @@ function updateDebt(id, patch) {
     }
   }
   if (fields.length === 0) return
-  getDb().prepare(`UPDATE debts SET ${fields.join(", ")} WHERE id = @id`).run(params)
+  const database = getDb()
+  database.prepare(`UPDATE debts SET ${fields.join(", ")} WHERE id = @id`).run(params)
+  bumpAndRecord(database, "debts", "id", id)
 }
 
 function deleteDebt(id) {
-  getDb().prepare("DELETE FROM debts WHERE id = ?").run(id)
+  softDelete(getDb(), "debts", "id", id)
 }
 
 /* ---------- Tarifs des cotisations (par cours), pour retrouver automatiquement le cours payé ---------- */
 function getCotisationPrices() {
-  const rows = getDb().prepare("SELECT course_type, price FROM cotisation_prices").all()
+  const rows = getDb().prepare("SELECT course_type, price FROM cotisation_prices WHERE deleted_at IS NULL").all()
   return Object.fromEntries(rows.map((r) => [r.course_type, r.price]))
 }
 
 function setCotisationPrice(courseType, price) {
-  getDb()
+  const database = getDb()
+  database
     .prepare(
       `INSERT INTO cotisation_prices (course_type, price) VALUES (@courseType, @price)
-       ON CONFLICT(course_type) DO UPDATE SET price = excluded.price`,
+       ON CONFLICT(course_type) DO UPDATE SET price = excluded.price, deleted_at = NULL`,
     )
     .run({ courseType, price })
+  bumpAndRecord(database, "cotisation_prices", "course_type", courseType)
 }
 
 /* ---------- Matériel / stock d'équipements ---------- */
 function getEquipmentItems() {
-  return getDb().prepare("SELECT * FROM equipment_items ORDER BY label").all()
+  return getDb().prepare("SELECT * FROM equipment_items WHERE deleted_at IS NULL ORDER BY label").all()
 }
 
 function createEquipmentItem(item) {
-  getDb()
+  const database = getDb()
+  database
     .prepare(
       `INSERT INTO equipment_items (id, label, stock_quantity, purchase_price, sale_price, notes)
        VALUES (@id, @label, @stockQuantity, @purchasePrice, @salePrice, @notes)`,
     )
     .run({ ...item, notes: item.notes ?? "" })
+  bumpAndRecord(database, "equipment_items", "id", item.id)
 }
 
 function updateEquipmentItem(id, patch) {
@@ -1355,27 +1137,29 @@ function updateEquipmentItem(id, patch) {
     }
   }
   if (fields.length === 0) return
-  getDb().prepare(`UPDATE equipment_items SET ${fields.join(", ")} WHERE id = @id`).run(params)
+  const database = getDb()
+  database.prepare(`UPDATE equipment_items SET ${fields.join(", ")} WHERE id = @id`).run(params)
+  bumpAndRecord(database, "equipment_items", "id", id)
 }
 
 function deleteEquipmentItem(id) {
-  getDb().prepare("DELETE FROM equipment_items WHERE id = ?").run(id)
+  softDelete(getDb(), "equipment_items", "id", id)
 }
 
 /* ---------- Disciplines (cours proposés par le club), librement gérées par le trésorier ---------- */
 function getDisciplines() {
-  return getDb().prepare("SELECT * FROM disciplines ORDER BY label").all()
+  return getDb().prepare("SELECT * FROM disciplines WHERE deleted_at IS NULL ORDER BY label").all()
 }
 
 function createDiscipline(discipline) {
-  getDb()
-    .prepare("INSERT INTO disciplines (id, label, price) VALUES (@id, @label, @price)")
-    .run(discipline)
+  const database = getDb()
+  database.prepare("INSERT INTO disciplines (id, label, price) VALUES (@id, @label, @price)").run(discipline)
+  bumpAndRecord(database, "disciplines", "id", discipline.id)
 }
 
 function findDisciplineByLabel(label) {
   if (!label) return null
-  return getDb().prepare("SELECT * FROM disciplines WHERE lower(label) = lower(?)").get(label.trim()) ?? null
+  return getDb().prepare("SELECT * FROM disciplines WHERE lower(label) = lower(?) AND deleted_at IS NULL").get(label.trim()) ?? null
 }
 
 /** Retrouve une discipline par son libellé exact, ou la crée (tarif à 0, à ajuster ensuite sur la
@@ -1405,20 +1189,22 @@ function updateDiscipline(id, patch) {
     }
   }
   if (fields.length === 0) return
-  getDb().prepare(`UPDATE disciplines SET ${fields.join(", ")} WHERE id = @id`).run(params)
+  const database = getDb()
+  database.prepare(`UPDATE disciplines SET ${fields.join(", ")} WHERE id = @id`).run(params)
+  bumpAndRecord(database, "disciplines", "id", id)
 }
 
 function deleteDiscipline(id) {
-  getDb().prepare("DELETE FROM disciplines WHERE id = ?").run(id)
+  softDelete(getDb(), "disciplines", "id", id)
 }
 
 /* ---------- Devis (document libre, non rattaché à un adhérent/une transaction) ---------- */
 function getQuotes() {
-  return getDb().prepare("SELECT * FROM quotes ORDER BY date DESC, created_at DESC").all()
+  return getDb().prepare("SELECT * FROM quotes WHERE deleted_at IS NULL ORDER BY date DESC, created_at DESC").all()
 }
 
 function getQuoteById(id) {
-  return getDb().prepare("SELECT * FROM quotes WHERE id = ?").get(id) ?? null
+  return getDb().prepare("SELECT * FROM quotes WHERE id = ? AND deleted_at IS NULL").get(id) ?? null
 }
 
 const QUOTE_FIELD_TO_COLUMN = {
@@ -1454,9 +1240,9 @@ function createQuote(quote) {
     placeholders.push(`@${key}`)
     params[key] = (key === "number" ? number : quote[key]) ?? ""
   }
-  getDb()
-    .prepare(`INSERT INTO quotes (${columns.join(", ")}) VALUES (${placeholders.join(", ")})`)
-    .run(params)
+  const database = getDb()
+  database.prepare(`INSERT INTO quotes (${columns.join(", ")}) VALUES (${placeholders.join(", ")})`).run(params)
+  bumpAndRecord(database, "quotes", "id", id)
   return id
 }
 
@@ -1470,11 +1256,215 @@ function updateQuote(id, patch) {
     }
   }
   if (fields.length === 0) return
-  getDb().prepare(`UPDATE quotes SET ${fields.join(", ")} WHERE id = @id`).run(params)
+  const database = getDb()
+  database.prepare(`UPDATE quotes SET ${fields.join(", ")} WHERE id = @id`).run(params)
+  bumpAndRecord(database, "quotes", "id", id)
 }
 
 function deleteQuote(id) {
-  getDb().prepare("DELETE FROM quotes WHERE id = ?").run(id)
+  softDelete(getDb(), "quotes", "id", id)
+}
+
+/* ---------- Moteur de sync NAS (voir electron/nas-sync.js pour le cycle push/pull lui-même) ---------- */
+
+function getTableColumns(database, table) {
+  return database.prepare(`PRAGMA table_info(${table})`).all().map((c) => c.name)
+}
+
+function getSyncDeviceId() {
+  return getDeviceId(getDb())
+}
+
+/** Changements locaux pas encore confirmés reçus par le NAS — à repousser au prochain cycle. */
+function getUnpushedChanges(limit = 200) {
+  return getDb().prepare("SELECT * FROM sync_changes WHERE pushed_at IS NULL ORDER BY seq ASC LIMIT ?").all(limit)
+}
+
+function markChangePushed(seq) {
+  getDb().prepare("UPDATE sync_changes SET pushed_at = datetime('now') WHERE seq = ?").run(seq)
+}
+
+/** Dernière version de cette ligne que CE poste sait être en accord avec le NAS (ni en avance avec
+ * une modification locale pas encore poussée, ni en retard par rapport à un pull pas encore tiré).
+ * Sert à la fois de `baseVersion` envoyé au push et de référence pour détecter un conflit au pull. */
+function getRowSyncedVersion(table, rowId) {
+  const row = getDb()
+    .prepare("SELECT last_synced_version FROM sync_row_state WHERE table_name = ? AND row_id = ?")
+    .get(table, rowId)
+  return row ? row.last_synced_version : 0
+}
+
+function setRowSyncedVersion(table, rowId, version) {
+  getDb()
+    .prepare(
+      `INSERT INTO sync_row_state (table_name, row_id, last_synced_version, last_synced_at)
+       VALUES (@table, @rowId, @version, datetime('now'))
+       ON CONFLICT(table_name, row_id) DO UPDATE SET last_synced_version = excluded.last_synced_version, last_synced_at = excluded.last_synced_at`,
+    )
+    .run({ table, rowId, version })
+}
+
+/** Curseur de pull (dernier `seq` du journal serveur déjà reçu et appliqué) — purement local,
+ * jamais dans `settings` (voir sync_meta dans shared/sync-schema.js). */
+function getPullCursor() {
+  const row = getDb().prepare("SELECT value FROM sync_meta WHERE key = 'server_seq_cursor'").get()
+  return row ? Number(row.value) : 0
+}
+
+function setPullCursor(seq) {
+  getDb()
+    .prepare(
+      `INSERT INTO sync_meta (key, value) VALUES ('server_seq_cursor', @seq)
+       ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
+    )
+    .run({ seq: String(seq) })
+}
+
+/** Applique un changement REÇU du NAS directement sur la table, sans repasser par recordChange —
+ * sinon ce changement serait aussitôt rejournalisé et repoussé vers le NAS, boucle infinie. Ne
+ * retient que les colonnes réellement présentes sur cette base (PRAGMA table_info), pour rester
+ * robuste si le schéma local a légèrement dérivé de celui du serveur. */
+function applyRemoteUpsert(table, rowId, payload) {
+  const database = getDb()
+  const pk = TABLE_PRIMARY_KEYS[table]
+  if (!pk) throw new Error(`Table non synchronisée : ${table}`)
+  const columns = getTableColumns(database, table)
+  const presentCols = columns.filter(
+    (c) => Object.prototype.hasOwnProperty.call(payload, c) && payload[c] !== undefined,
+  )
+  const updateCols = presentCols.filter((c) => !pk.includes(c))
+  const sql = `INSERT INTO ${table} (${presentCols.join(", ")})
+    VALUES (${presentCols.map((c) => `@${c}`).join(", ")})
+    ON CONFLICT(${pk.join(", ")}) DO UPDATE SET ${updateCols.map((c) => `${c} = excluded.${c}`).join(", ")}`
+  database.prepare(sql).run(payload)
+}
+
+function applyRemoteDelete(table, rowId, version) {
+  const database = getDb()
+  const pk = TABLE_PRIMARY_KEYS[table]
+  const pkValues = pkValuesFromRowId(table, rowId)
+  const where = pk.map((c) => `${c} = @${c}`).join(" AND ")
+  database
+    .prepare(
+      `UPDATE ${table} SET deleted_at = datetime('now'), sync_version = @version, updated_at = datetime('now') WHERE ${where}`,
+    )
+    .run({ ...pkValues, version })
+}
+
+/** File d'attente des conflits détectés (même ligne modifiée des deux côtés depuis le dernier point
+ * de sync commun) — jamais résolus automatiquement, voir components/parametres/sync-conflict-dialog. */
+function addConflict({ table, rowId, localPayload, remotePayload }) {
+  const id = crypto.randomUUID()
+  getDb()
+    .prepare(
+      `INSERT INTO sync_conflicts (id, table_name, row_id, local_payload_json, remote_payload_json, detected_at)
+       VALUES (@id, @table, @rowId, @localPayloadJson, @remotePayloadJson, datetime('now'))`,
+    )
+    .run({
+      id,
+      table,
+      rowId,
+      localPayloadJson: JSON.stringify(localPayload),
+      remotePayloadJson: JSON.stringify(remotePayload),
+    })
+  return id
+}
+
+function parseConflictRow(r) {
+  return {
+    id: r.id,
+    table: r.table_name,
+    rowId: r.row_id,
+    localPayload: JSON.parse(r.local_payload_json),
+    remotePayload: JSON.parse(r.remote_payload_json),
+    detectedAt: r.detected_at,
+  }
+}
+
+function getConflicts() {
+  return getDb()
+    .prepare("SELECT * FROM sync_conflicts WHERE resolved_at IS NULL ORDER BY detected_at")
+    .all()
+    .map(parseConflictRow)
+}
+
+function getConflictById(id) {
+  const r = getDb().prepare("SELECT * FROM sync_conflicts WHERE id = ?").get(id)
+  return r ? parseConflictRow(r) : null
+}
+
+/** "Garder la version locale" : rien à écrire sur la table (la ligne locale porte déjà l'édition
+ * voulue) — on avance juste le curseur local jusqu'à la version distante qui causait le conflit,
+ * pour que le prochain push reparte avec le bon `baseVersion` et s'applique proprement. */
+function resolveConflictKeepLocal(id) {
+  const conflict = getConflictById(id)
+  if (!conflict) return
+  const remoteVersion = conflict.remotePayload?.sync_version ?? getRowSyncedVersion(conflict.table, conflict.rowId)
+  setRowSyncedVersion(conflict.table, conflict.rowId, remoteVersion)
+  getDb().prepare("UPDATE sync_conflicts SET resolved_at = datetime('now') WHERE id = ?").run(id)
+}
+
+/** "Garder la version du NAS" : on adopte le payload distant tel quel (déjà à la version que le
+ * serveur reconnaît), donc ce poste est immédiatement de nouveau à jour — pas besoin de le repousser,
+ * on était simplement en retard. L'éventuel changement local pas encore poussé pour cette ligne reste
+ * dans sync_changes mais ne sera plus jamais appliqué (son row_id est désormais à une version plus
+ * récente que celle sur laquelle il se basait) : marqué poussé pour ne pas le retenter en boucle. */
+function resolveConflictKeepRemote(id) {
+  const conflict = getConflictById(id)
+  if (!conflict) return
+  const remoteVersion = conflict.remotePayload?.sync_version ?? getRowSyncedVersion(conflict.table, conflict.rowId)
+  if (conflict.remotePayload) {
+    applyRemoteUpsert(conflict.table, conflict.rowId, conflict.remotePayload)
+  } else {
+    applyRemoteDelete(conflict.table, conflict.rowId, remoteVersion)
+  }
+  setRowSyncedVersion(conflict.table, conflict.rowId, remoteVersion)
+  const database = getDb()
+  database
+    .prepare("UPDATE sync_changes SET pushed_at = datetime('now') WHERE table_name = @table AND row_id = @rowId AND pushed_at IS NULL")
+    .run({ table: conflict.table, rowId: conflict.rowId })
+  database.prepare("UPDATE sync_conflicts SET resolved_at = datetime('now') WHERE id = ?").run(id)
+}
+
+/** Version sync_version actuelle de la ligne elle-même (colonne de la table), à distinguer de
+ * sync_row_state.last_synced_version (ce que CE poste sait être déjà confirmé par le NAS) — l'écart
+ * entre les deux indique une modification locale pas encore poussée. */
+function getRowCurrentVersion(table, rowId) {
+  const pk = TABLE_PRIMARY_KEYS[table]
+  if (!pk) return null
+  const pkValues = pkValuesFromRowId(table, rowId)
+  const where = pk.map((c) => `${c} = @${c}`).join(" AND ")
+  const row = getDb().prepare(`SELECT sync_version FROM ${table} WHERE ${where}`).get(pkValues)
+  return row ? row.sync_version : null
+}
+
+function getRowPayloadByRowId(table, rowId) {
+  const pk = TABLE_PRIMARY_KEYS[table]
+  if (!pk) return null
+  const pkValues = pkValuesFromRowId(table, rowId)
+  const where = pk.map((c) => `${c} = @${c}`).join(" AND ")
+  return getDb().prepare(`SELECT * FROM ${table} WHERE ${where}`).get(pkValues) ?? null
+}
+
+function hasUnresolvedConflict(table, rowId) {
+  return !!getDb()
+    .prepare("SELECT 1 FROM sync_conflicts WHERE table_name = ? AND row_id = ? AND resolved_at IS NULL")
+    .get(table, rowId)
+}
+
+/** Petit bookkeeping local additionnel (statut de la dernière synchro NAS : date, erreur) — jamais
+ * dans `settings`, par le même principe que device_id/server_seq_cursor. */
+function getSyncMeta(key) {
+  const row = getDb().prepare("SELECT value FROM sync_meta WHERE key = ?").get(key)
+  return row ? row.value : null
+}
+
+function setSyncMeta(key, value) {
+  getDb()
+    .prepare(
+      `INSERT INTO sync_meta (key, value) VALUES (@key, @value) ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
+    )
+    .run({ key, value })
 }
 
 function getDbFilePath() {
@@ -1575,4 +1565,23 @@ module.exports = {
   setClientSeason,
   deleteClientSeason,
   resetSeasonClients,
+  getSyncDeviceId,
+  getUnpushedChanges,
+  markChangePushed,
+  getRowSyncedVersion,
+  setRowSyncedVersion,
+  getPullCursor,
+  setPullCursor,
+  applyRemoteUpsert,
+  applyRemoteDelete,
+  addConflict,
+  getConflicts,
+  getConflictById,
+  resolveConflictKeepLocal,
+  resolveConflictKeepRemote,
+  getRowCurrentVersion,
+  getRowPayloadByRowId,
+  hasUnresolvedConflict,
+  getSyncMeta,
+  setSyncMeta,
 }

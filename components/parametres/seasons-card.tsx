@@ -11,7 +11,7 @@ import { useSeasons, type Season } from "@/lib/seasons-store"
 import { useTranslation } from "@/lib/i18n/context"
 import { formatDate } from "@/lib/mock-data"
 
-export function SeasonsCard() {
+export function SeasonsCard({ canEdit }: { canEdit: boolean }) {
   const { t } = useTranslation()
   const { seasons, activeSeasonId } = useSeasons()
   const [dialogState, setDialogState] = useState<{ open: boolean; season: Season | null }>({
@@ -30,14 +30,16 @@ export function SeasonsCard() {
             </CardTitle>
             <CardDescription>{t.seasons.cardSubtitle}</CardDescription>
           </div>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setDialogState({ open: true, season: null })}
-          >
-            <PlusIcon data-icon="inline-start" />
-            {t.seasons.new}
-          </Button>
+          {canEdit ? (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setDialogState({ open: true, season: null })}
+            >
+              <PlusIcon data-icon="inline-start" />
+              {t.seasons.new}
+            </Button>
+          ) : null}
         </div>
       </CardHeader>
       <CardContent className="flex flex-col gap-2">
@@ -60,14 +62,16 @@ export function SeasonsCard() {
                   {formatDate(season.startDate)} – {formatDate(season.endDate)}
                 </span>
               </div>
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                aria-label={t.seasons.edit}
-                onClick={() => setDialogState({ open: true, season })}
-              >
-                <PencilIcon />
-              </Button>
+              {canEdit ? (
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label={t.seasons.edit}
+                  onClick={() => setDialogState({ open: true, season })}
+                >
+                  <PencilIcon />
+                </Button>
+              ) : null}
             </div>
           ))
         )}

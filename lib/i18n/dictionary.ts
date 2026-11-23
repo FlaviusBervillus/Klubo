@@ -445,6 +445,31 @@ export interface Dictionary {
     syncResultChargesLabel: string
     syncResultDisputesLabel: string
     syncResultOperationsImportedSuffix: string
+    nasSyncTitle: string
+    nasSyncSubtitle: string
+    nasSyncUrlLabel: string
+    nasSyncApiKeyLabel: string
+    nasSyncSave: string
+    nasSyncSaved: string
+    nasSyncNotConfigured: string
+    nasSyncConnected: string
+    nasSyncError: string
+    nasSyncLastSync: string
+    nasSyncNever: string
+    nasSyncNow: string
+    nasSyncSyncing: string
+    nasSyncDone: string
+    nasSyncConflictsCount: string
+    nasSyncResolveConflicts: string
+    nasSyncConflictDialogTitle: string
+    nasSyncConflictDialogDescription: string
+    nasSyncConflictTable: string
+    nasSyncConflictLocal: string
+    nasSyncConflictRemote: string
+    nasSyncKeepLocal: string
+    nasSyncKeepRemote: string
+    nasSyncResolved: string
+    nasSyncNoConflicts: string
   }
   clients: {
     title: string

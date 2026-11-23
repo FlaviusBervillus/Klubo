@@ -81,7 +81,7 @@ function ImageFieldUpload({
   )
 }
 
-export function ClubIdentityCard() {
+export function ClubIdentityCard({ canEdit }: { canEdit: boolean }) {
   const { t } = useTranslation()
   const { settings, update } = useClubSettings()
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -167,6 +167,7 @@ export function ClubIdentityCard() {
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit} className="flex flex-col gap-6 sm:flex-row">
+        <fieldset disabled={!canEdit} className="contents">
           <div className="flex flex-col items-center gap-2">
             <div className="flex size-20 shrink-0 items-center justify-center overflow-hidden rounded-xl border bg-muted">
               {settings.logoUrl ? (
@@ -361,6 +362,7 @@ export function ClubIdentityCard() {
               {t.common.save}
             </Button>
           </FieldGroup>
+        </fieldset>
         </form>
       </CardContent>
     </Card>

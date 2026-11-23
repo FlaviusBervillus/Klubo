@@ -13,6 +13,7 @@ const { generateReceiptPdf, renderInvoiceHtml } = require("./invoice-pdf")
 const { generateQuotePdf, renderQuoteHtml } = require("./quote-pdf")
 const excelImport = require("./excel-import")
 const { setupAutoUpdater } = require("./updater")
+const nasSync = require("./nas-sync")
 
 const PROTOCOL = "klubo"
 
@@ -749,6 +750,22 @@ ipcMain.handle("mega:restore", async (_e, email, password, fileId) => {
   }
 })
 
+/* ---------- Synchronisation NAS ---------- */
+ipcMain.handle("nas:syncNow", () => nasSync.runSyncCycle())
+ipcMain.handle("nas:getStatus", () => nasSync.getStatus())
+ipcMain.handle("nas:getConflicts", () => nasSync.getConflicts())
+ipcMain.handle("nas:resolveConflict", (_e, id, resolution) => nasSync.resolveConflict(id, resolution))
+ipcMain.handle("nas:getConfig", () => nasSync.getConfig())
+ipcMain.handle("nas:setConfig", (_e, config) => nasSync.setConfig(config))
+
+// Pousse le statut (succès, échec silencieux, nouveaux conflits) à toutes les fenêtres dès qu'un
+// cycle de sync se termine, pour que la carte Paramètres se mette à jour sans avoir à sonder.
+nasSync.setOnStatusChange((status) => {
+  for (const win of BrowserWindow.getAllWindows()) {
+    win.webContents.send("nas:status-changed", status)
+  }
+})
+
 /* ---------- Cycle de vie de l'app ---------- */
 app.whenReady().then(() => {
   if (process.platform === "darwin" && app.dock) {
@@ -765,6 +782,10 @@ app.whenReady().then(() => {
     if (app.isPackaged) setupAutoUpdater(mainWindow)
   })
 
+  // Démarre tout de suite (si configurée) puis toutes les 2h — voir electron/nas-sync.js. Un échec
+  // (NAS hors réseau) reste silencieux, seul le statut exposé à l'UI change.
+  nasSync.startBackgroundSync()
+
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) {
       const address = server.address()
@@ -776,4 +797,8 @@ app.whenReady().then(() => {
 app.on("window-all-closed", () => {
   db.closeDb()
   if (process.platform !== "darwin") app.quit()
+})
+
+app.on("before-quit", () => {
+  nasSync.stopBackgroundSync()
 })

@@ -39,7 +39,7 @@ function api() {
   return typeof window !== "undefined" ? window.electronAPI : undefined
 }
 
-export function GoCardlessCard() {
+export function GoCardlessCard({ canEdit }: { canEdit: boolean }) {
   const { t } = useTranslation()
   const fields = [
     {
@@ -184,23 +184,25 @@ export function GoCardlessCard() {
           )}
         </Row>
 
-        <div className="mt-1 flex flex-col gap-2 sm:flex-row">
-          <ApiCredentialsDialog
-            title={t.settings.gocardlessKeysDialogTitle}
-            description={t.settings.gocardlessKeysDialogDescription}
-            fields={fields}
-            values={data}
-            onSave={setSecret}
-            trigger={
-              <Button variant="outline" className="flex-1">
-                {t.settings.configureKeys}
-              </Button>
-            }
-          />
-          <Button variant="outline" className="flex-1" onClick={openConnectDialog}>
-            {t.settings.connectBank}
-          </Button>
-        </div>
+        {canEdit ? (
+          <div className="mt-1 flex flex-col gap-2 sm:flex-row">
+            <ApiCredentialsDialog
+              title={t.settings.gocardlessKeysDialogTitle}
+              description={t.settings.gocardlessKeysDialogDescription}
+              fields={fields}
+              values={data}
+              onSave={setSecret}
+              trigger={
+                <Button variant="outline" className="flex-1">
+                  {t.settings.configureKeys}
+                </Button>
+              }
+            />
+            <Button variant="outline" className="flex-1" onClick={openConnectDialog}>
+              {t.settings.connectBank}
+            </Button>
+          </div>
+        ) : null}
       </CardContent>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>

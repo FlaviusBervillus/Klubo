@@ -23,7 +23,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { useAuth } from "@/lib/auth-context"
 import { usePayersStore } from "@/lib/payers-store"
+import { canEditInvoice } from "@/lib/permissions"
 import { useTransactionsStore } from "@/lib/transactions-store"
 import { useTranslation } from "@/lib/i18n/context"
 import type { ReceiptOverrides } from "@/types/electron"
@@ -83,6 +85,11 @@ export function ReceiptPreviewDialog({
   virtual,
 }: ReceiptPreviewDialogProps) {
   const { t } = useTranslation()
+  const { session } = useAuth()
+  // Le secrétaire peut consulter et télécharger une facture, mais pas en personnaliser le contenu
+  // (payeur, montant, quantité) — voir lib/permissions.ts. Ne s'applique qu'aux factures, jamais aux
+  // devis, qui ont leur propre éditeur.
+  const canEdit = canEditInvoice(session?.role)
   const { payers } = usePayersStore()
   const { refresh: refreshTransactions } = useTransactionsStore()
   const clientItems = payers.map((p) => ({ value: p.id, label: `${p.firstName} ${p.lastName}`.trim() }))
@@ -253,6 +260,7 @@ export function ReceiptPreviewDialog({
           </div>
         ) : (
           <div className="grid gap-6 md:grid-cols-2">
+            <fieldset disabled={!canEdit} className="contents">
             <FieldGroup>
               {!hasResolvedClient ? (
                 <Field>
@@ -338,6 +346,7 @@ export function ReceiptPreviewDialog({
                 </Field>
               </div>
             </FieldGroup>
+            </fieldset>
 
             <div className="flex flex-col gap-2">
               <div className="flex items-center justify-end gap-1">

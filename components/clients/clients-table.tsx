@@ -54,7 +54,9 @@ import {
   type CourseType,
   type PaymentMethod,
 } from "@/lib/mock-data"
+import { useAuth } from "@/lib/auth-context"
 import { usePayersStore } from "@/lib/payers-store"
+import { canEditPayment } from "@/lib/permissions"
 import { useSeasonClients, useSeasonTransactions } from "@/lib/seasons-store"
 import { useTranslation } from "@/lib/i18n/context"
 
@@ -72,6 +74,8 @@ const UNCATEGORIZED_STYLE = "border-dashed bg-transparent text-muted-foreground"
 
 export function ClientsTable() {
   const { t } = useTranslation()
+  const { session } = useAuth()
+  const canEditPaymentCols = canEditPayment(session?.role)
   const { clients, setClientSeasonInfo } = useSeasonClients()
   const seasonTransactions = useSeasonTransactions()
   const { disciplines } = useDisciplinesStore()
@@ -360,6 +364,8 @@ export function ClientsTable() {
                   <TableCell>
                     {c.status === UNCATEGORIZED_COURSE || !c.paid ? (
                       <span className="text-muted-foreground">—</span>
+                    ) : !canEditPaymentCols ? (
+                      <span className="text-sm font-medium">{c.method}</span>
                     ) : (
                       <Input
                         key={`${c.id}-${c.method}`}
@@ -375,24 +381,33 @@ export function ClientsTable() {
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-1">
-                      <Select
-                        items={paidItems}
-                        value={c.paid ? "paid" : "unpaid"}
-                        onValueChange={(v) => v && setPaid(c.id, c.status, v === "paid")}
-                      >
-                        <SelectTrigger
-                          size="sm"
-                          className={`w-auto min-w-28 ${c.paid ? "text-success" : "text-destructive"}`}
+                      {canEditPaymentCols ? (
+                        <Select
+                          items={paidItems}
+                          value={c.paid ? "paid" : "unpaid"}
+                          onValueChange={(v) => v && setPaid(c.id, c.status, v === "paid")}
                         >
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectGroup>
-                            <SelectItem value="paid">{t.clients.paid}</SelectItem>
-                            <SelectItem value="unpaid">{t.clients.unpaid}</SelectItem>
-                          </SelectGroup>
-                        </SelectContent>
-                      </Select>
+                          <SelectTrigger
+                            size="sm"
+                            className={`w-auto min-w-28 ${c.paid ? "text-success" : "text-destructive"}`}
+                          >
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectGroup>
+                              <SelectItem value="paid">{t.clients.paid}</SelectItem>
+                              <SelectItem value="unpaid">{t.clients.unpaid}</SelectItem>
+                            </SelectGroup>
+                          </SelectContent>
+                        </Select>
+                      ) : (
+                        <Badge
+                          variant="outline"
+                          className={`font-medium ${c.paid ? "border-transparent bg-success/12 text-success dark:text-[oklch(0.72_0.14_155)]" : "border-transparent bg-destructive/10 text-destructive"}`}
+                        >
+                          {c.paid ? t.clients.paid : t.clients.unpaid}
+                        </Badge>
+                      )}
                       {hasUnseenEvidence ? (
                         <Dialog>
                           <DialogTrigger

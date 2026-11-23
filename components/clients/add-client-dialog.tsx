@@ -26,8 +26,10 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
+import { useAuth } from "@/lib/auth-context"
 import { useClientsStore } from "@/lib/clients-store"
 import { useDisciplinesStore } from "@/lib/disciplines-store"
+import { canEditPayment } from "@/lib/permissions"
 import { useSeasonClients } from "@/lib/seasons-store"
 import { useTranslation } from "@/lib/i18n/context"
 import {
@@ -80,6 +82,8 @@ function formFromClient(client: Client) {
 
 export function AddClientDialog({ client }: { client?: Client } = {}) {
   const { t } = useTranslation()
+  const { session } = useAuth()
+  const canEditPaymentFields = canEditPayment(session?.role)
   const { clients, addClient, updateClient, available } = useClientsStore()
   const { setClientSeasonInfo, hasActiveSeason } = useSeasonClients()
   const { disciplines } = useDisciplinesStore()
@@ -292,6 +296,7 @@ export function AddClientDialog({ client }: { client?: Client } = {}) {
                 <Select
                   value={form.method}
                   onValueChange={(v) => v && setForm((f) => ({ ...f, method: v as PaymentMethod }))}
+                  disabled={!canEditPaymentFields}
                 >
                   <SelectTrigger>
                     <SelectValue />
@@ -315,6 +320,7 @@ export function AddClientDialog({ client }: { client?: Client } = {}) {
                 id="client-paid"
                 checked={form.paid}
                 onCheckedChange={(checked) => setForm((f) => ({ ...f, paid: checked }))}
+                disabled={!canEditPaymentFields}
               />
             </Field>
 

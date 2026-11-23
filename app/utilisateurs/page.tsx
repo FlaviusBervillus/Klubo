@@ -73,7 +73,7 @@ export default function UsersPage() {
     refresh()
   }, [])
 
-  if (session?.role !== "admin") {
+  if (!session) {
     return (
       <Empty>
         <EmptyHeader>
@@ -86,6 +86,11 @@ export default function UsersPage() {
       </Empty>
     )
   }
+
+  // Tout rôle connecté peut désormais CONSULTER la liste des comptes (noms, e-mails, rôles) ; seul
+  // l'administrateur peut la MODIFIER (inviter, changer un rôle, supprimer). Chacun garde la
+  // possibilité de réinitialiser son PROPRE mot de passe, même sans ce rôle.
+  const canEdit = session.role === "admin"
 
   async function changeRole(id: string, role: Role) {
     const electronApi = api()
@@ -121,7 +126,7 @@ export default function UsersPage() {
           <h2 className="text-2xl font-semibold tracking-tight">{t.users.title}</h2>
           <p className="text-sm text-muted-foreground">{t.users.subtitle}</p>
         </div>
-        <InviteUserDialog onCreated={refresh} />
+        {canEdit ? <InviteUserDialog onCreated={refresh} /> : null}
       </div>
 
       {loaded ? (
@@ -141,9 +146,7 @@ export default function UsersPage() {
                   <TableCell className="font-medium">{u.name}</TableCell>
                   <TableCell className="text-muted-foreground">{u.email}</TableCell>
                   <TableCell>
-                    {u.id === session.id ? (
-                      <Badge variant="outline">{t.roles[u.role as Role]}</Badge>
-                    ) : (
+                    {canEdit && u.id !== session.id ? (
                       <Select
                         value={u.role}
                         onValueChange={(v) => v && changeRole(u.id, v as Role)}
@@ -161,12 +164,16 @@ export default function UsersPage() {
                           </SelectGroup>
                         </SelectContent>
                       </Select>
+                    ) : (
+                      <Badge variant="outline">{t.roles[u.role as Role]}</Badge>
                     )}
                   </TableCell>
                   <TableCell>
                     <div className="flex justify-end gap-2">
-                      <ResetPasswordDialog onConfirm={() => resetPassword(u.id)} />
-                      {u.id !== session.id ? (
+                      {canEdit || u.id === session.id ? (
+                        <ResetPasswordDialog onConfirm={() => resetPassword(u.id)} />
+                      ) : null}
+                      {canEdit && u.id !== session.id ? (
                         <DeleteUserDialog onConfirm={() => deleteUser(u.id)} />
                       ) : null}
                     </div>

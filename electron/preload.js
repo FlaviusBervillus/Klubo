@@ -125,4 +125,17 @@ contextBridge.exposeInMainWorld("electronAPI", {
     restore: (email, password, fileId) =>
       ipcRenderer.invoke("mega:restore", email, password, fileId),
   },
+  nas: {
+    syncNow: () => ipcRenderer.invoke("nas:syncNow"),
+    getStatus: () => ipcRenderer.invoke("nas:getStatus"),
+    getConflicts: () => ipcRenderer.invoke("nas:getConflicts"),
+    resolveConflict: (id, resolution) => ipcRenderer.invoke("nas:resolveConflict", id, resolution),
+    getConfig: () => ipcRenderer.invoke("nas:getConfig"),
+    setConfig: (config) => ipcRenderer.invoke("nas:setConfig", config),
+    onStatusChange: (listener) => {
+      const handler = (_event, status) => listener(status)
+      ipcRenderer.on("nas:status-changed", handler)
+      return () => ipcRenderer.removeListener("nas:status-changed", handler)
+    },
+  },
 })

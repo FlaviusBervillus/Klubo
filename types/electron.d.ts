@@ -419,6 +419,35 @@ declare global {
           fileId: string,
         ) => Promise<{ ok: true } | { ok: false; error: string }>
       }
+      nas: {
+        syncNow: () => Promise<{ ok: true; pendingConflicts: number } | { ok: false; error: string }>
+        getStatus: () => Promise<NasSyncStatus>
+        getConflicts: () => Promise<NasSyncConflict[]>
+        resolveConflict: (
+          id: string,
+          resolution: "local" | "remote",
+        ) => Promise<{ ok: true; pendingConflicts: number } | { ok: false; error: string }>
+        getConfig: () => Promise<{ serverUrl: string; apiKey: string }>
+        setConfig: (config: { serverUrl?: string; apiKey?: string }) => Promise<void>
+        onStatusChange: (listener: (status: NasSyncStatus) => void) => () => void
+      }
     }
   }
+}
+
+export interface NasSyncStatus {
+  configured: boolean
+  lastSyncedAt: string | null
+  lastError: string | null
+  pendingConflictsCount: number
+  syncing: boolean
+}
+
+export interface NasSyncConflict {
+  id: string
+  table: string
+  rowId: string
+  localPayload: Record<string, unknown>
+  remotePayload: Record<string, unknown>
+  detectedAt: string
 }

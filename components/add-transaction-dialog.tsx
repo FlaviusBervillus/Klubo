@@ -34,6 +34,7 @@ import {
   ToggleGroup,
   ToggleGroupItem,
 } from "@/components/ui/toggle-group"
+import { useAuth } from "@/lib/auth-context"
 import { useTranslation } from "@/lib/i18n/context"
 import {
   ALL_PAYMENT_METHODS,
@@ -42,6 +43,7 @@ import {
   type PaymentMethod,
   type TransactionType,
 } from "@/lib/mock-data"
+import { canCreateTransaction } from "@/lib/permissions"
 import { useTransactionsStore } from "@/lib/transactions-store"
 
 const emptyForm = {
@@ -59,10 +61,15 @@ export function AddTransactionDialog({
   trigger?: React.ReactNode
 }) {
   const { t } = useTranslation()
+  const { session } = useAuth()
   const { addTransaction, available } = useTransactionsStore()
   const [open, setOpen] = useState(false)
   const [type, setType] = useState<TransactionType>("entree")
   const [form, setForm] = useState(emptyForm)
+
+  // Le secrétaire peut tout consulter/modifier une transaction existante, mais ne peut pas en créer
+  // une nouvelle — voir lib/permissions.ts.
+  if (!canCreateTransaction(session?.role)) return null
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
