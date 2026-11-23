@@ -6,6 +6,7 @@ __v0_jsx-dev-runtime.ts
 .v0-trash/
 .vercel/
 .idea
+nas-sync-server
 
 # Environment variables
 .env*.local
