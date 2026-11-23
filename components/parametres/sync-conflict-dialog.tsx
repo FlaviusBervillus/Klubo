@@ -25,14 +25,21 @@ const SYNC_INTERNAL_COLUMNS = new Set(["sync_version", "updated_at", "deleted_at
 
 /** Un seul composant générique pour les ~17 tables synchronisées : calcule la différence champ par
  * champ entre la version locale et distante d'une même ligne, sans connaître la forme précise de
- * chaque table — évite d'avoir à écrire une vue de conflit par table. */
-function diffFields(local: Record<string, unknown>, remote: Record<string, unknown>) {
-  const keys = new Set([...Object.keys(local), ...Object.keys(remote)])
+ * chaque table — évite d'avoir à écrire une vue de conflit par table. `local`/`remote` valent `null`
+ * quand ce côté du conflit est une suppression (voir electron/nas-sync.js, qui transmet payload_json
+ * tel quel pour un op "delete") plutôt qu'un payload complet. */
+function diffFields(
+  local: Record<string, unknown> | null,
+  remote: Record<string, unknown> | null,
+) {
+  const keys = new Set([...Object.keys(local ?? {}), ...Object.keys(remote ?? {})])
   const rows: { key: string; local: unknown; remote: unknown }[] = []
   for (const key of keys) {
     if (SYNC_INTERNAL_COLUMNS.has(key)) continue
-    if (JSON.stringify(local[key]) !== JSON.stringify(remote[key])) {
-      rows.push({ key, local: local[key], remote: remote[key] })
+    const localValue = local?.[key]
+    const remoteValue = remote?.[key]
+    if (JSON.stringify(localValue) !== JSON.stringify(remoteValue)) {
+      rows.push({ key, local: localValue, remote: remoteValue })
     }
   }
   return rows
@@ -119,6 +126,17 @@ export function SyncConflictDialog({
                     <span className="font-medium text-muted-foreground" />
                     <span className="font-medium text-muted-foreground">{t.settings.nasSyncConflictLocal}</span>
                     <span className="font-medium text-muted-foreground">{t.settings.nasSyncConflictRemote}</span>
+                    {conflict.localPayload === null || conflict.remotePayload === null ? (
+                      <Fragment>
+                        <span className="text-muted-foreground">{t.settings.nasSyncConflictDeletedRow}</span>
+                        <span className="font-medium">
+                          {conflict.localPayload === null ? t.settings.nasSyncConflictDeleted : "—"}
+                        </span>
+                        <span className="font-medium">
+                          {conflict.remotePayload === null ? t.settings.nasSyncConflictDeleted : "—"}
+                        </span>
+                      </Fragment>
+                    ) : null}
                     {fields.map((f) => (
                       <Fragment key={f.key}>
                         <span className="text-muted-foreground">{f.key}</span>

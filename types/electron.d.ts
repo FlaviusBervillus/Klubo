@@ -447,7 +447,8 @@ export interface NasSyncConflict {
   id: string
   table: string
   rowId: string
-  localPayload: Record<string, unknown>
-  remotePayload: Record<string, unknown>
+  // `null` quand ce côté du conflit est une suppression (voir electron/nas-sync.js).
+  localPayload: Record<string, unknown> | null
+  remotePayload: Record<string, unknown> | null
   detectedAt: string
 }

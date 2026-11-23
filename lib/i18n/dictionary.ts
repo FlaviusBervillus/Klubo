@@ -466,6 +466,8 @@ export interface Dictionary {
     nasSyncConflictTable: string
     nasSyncConflictLocal: string
     nasSyncConflictRemote: string
+    nasSyncConflictDeletedRow: string
+    nasSyncConflictDeleted: string
     nasSyncKeepLocal: string
     nasSyncKeepRemote: string
     nasSyncResolved: string

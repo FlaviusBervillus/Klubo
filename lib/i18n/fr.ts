@@ -500,6 +500,8 @@ export const fr: Dictionary = {
     nasSyncConflictTable: "Donnée",
     nasSyncConflictLocal: "Ce poste",
     nasSyncConflictRemote: "NAS",
+    nasSyncConflictDeletedRow: "Ligne",
+    nasSyncConflictDeleted: "Supprimée",
     nasSyncKeepLocal: "Garder la version locale",
     nasSyncKeepRemote: "Garder la version du NAS",
     nasSyncResolved: "Conflit résolu",
